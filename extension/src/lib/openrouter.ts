@@ -56,3 +56,43 @@ export async function streamChat(
   }
   onDone()
 }
+
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: { name: string; arguments: string }
+}
+
+export async function callWithTools(
+  messages: Array<{ role: string; content: string }>,
+  apiKey: string,
+  model: string,
+  tools: unknown[]
+): Promise<{ content: string | null; toolCalls: ToolCall[] | null }> {
+  const res = await fetch(`${BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'chrome-extension://solai-wallet',
+      'X-Title': 'SOLAI Wallet',
+    },
+    body: JSON.stringify({ model, messages, tools, tool_choice: 'auto', stream: false }),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const msg = body?.error?.message ?? ''
+    if (res.status === 401) throw new Error('Invalid API key — check Settings')
+    if (res.status === 429) throw new Error('Rate limit reached — try again in a moment')
+    if (res.status === 402) throw new Error('Insufficient credits on OpenRouter')
+    throw new Error(msg || `OpenRouter error ${res.status}`)
+  }
+
+  const data = await res.json()
+  const message = data.choices?.[0]?.message
+  return {
+    content: message?.content ?? null,
+    toolCalls: message?.tool_calls ?? null,
+  }
+}

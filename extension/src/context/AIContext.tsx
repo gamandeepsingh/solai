@@ -1,69 +1,193 @@
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
 import { streamChat } from '../lib/openrouter'
+import { runAgentTurn } from '../lib/agent'
+import { getSwapQuote, executeSwap } from '../lib/jupiter'
+import { sendSol, sendUsdc } from '../lib/solana'
+import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
 import { getSync } from '../lib/storage'
+import { useWallet } from './WalletContext'
+import { useBalance } from '../hooks/useBalance'
 import type { ChatMessage } from '../types/ai'
+import type { ActionParams } from '../types/agent'
 
 interface AIContextValue {
   messages: ChatMessage[]
   isStreaming: boolean
-  sendMessage: (content: string, systemContext?: string) => Promise<void>
+  sendMessage: (content: string) => Promise<void>
+  confirmAction: (messageId: string) => Promise<void>
+  cancelAction: (messageId: string) => void
   clearMessages: () => void
   abort: () => void
 }
 
 const AIContext = createContext<AIContextValue>(null!)
 
+function updateMsg(
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
+  id: string,
+  patch: Partial<ChatMessage>
+) {
+  setMessages(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+}
+
 export function AIProvider({ children }: { children: ReactNode }) {
+  const { keypair, network, account } = useWallet()
+  const { balances } = useBalance()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
-  const sendMessage = useCallback(async (content: string, systemContext?: string) => {
+  const sendMessage = useCallback(async (content: string) => {
     const apiKey = await getSync('openrouterApiKey')
-    if (!apiKey) throw new Error('No API key')
+    if (!apiKey) throw new Error('No API key — add your OpenRouter key in Settings')
 
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', content, timestamp: Date.now() }
-    const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now() }
-
-    setMessages(prev => {
-      const limited = prev.slice(-18)
-      return [...limited, userMsg, assistantMsg]
-    })
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(), role: 'user', content, timestamp: Date.now(),
+    }
+    setMessages(prev => [...prev.slice(-18), userMsg])
     setIsStreaming(true)
 
-    const history: ChatMessage[] = systemContext
-      ? [{ id: 'sys', role: 'system', content: systemContext, timestamp: 0 }, ...messages.slice(-18), userMsg]
-      : [...messages.slice(-18), userMsg]
+    const sol = balances.find(b => b.meta.symbol === 'SOL')?.amount ?? 0
+    const usdc = balances.find(b => b.meta.symbol === 'USDC')?.amount ?? 0
+    const ctx = {
+      publicKey: account?.publicKey ?? '',
+      network,
+      solBalance: sol,
+      usdcBalance: usdc,
+    }
+
+    // Phase 1: agent intent detection
+    let action: ActionParams | null = null
+    try {
+      action = await runAgentTurn(content, messages.slice(-16), apiKey, 'openai/gpt-4o-mini', ctx)
+    } catch (e: any) {
+      // contact not found or other resolver error — show as assistant text
+      const errMsg: ChatMessage = {
+        id: crypto.randomUUID(), role: 'assistant',
+        content: e?.message ?? 'Something went wrong', timestamp: Date.now(),
+      }
+      setMessages(prev => [...prev, errMsg])
+      setIsStreaming(false)
+      return
+    }
+
+    // Phase 2a: action card path
+    if (action) {
+      const actionMsg: ChatMessage = {
+        id: crypto.randomUUID(), role: 'assistant', content: '',
+        timestamp: Date.now(), action, actionState: 'pending',
+      }
+      setMessages(prev => [...prev, actionMsg])
+      setIsStreaming(false)
+      return
+    }
+
+    // Phase 2b: streaming text path
+    const assistantMsg: ChatMessage = {
+      id: crypto.randomUUID(), role: 'assistant', content: '', timestamp: Date.now(),
+    }
+    setMessages(prev => [...prev, assistantMsg])
+
+    const systemPrompt = `You are SOLAI, a friendly Solana wallet assistant. Wallet: ${ctx.publicKey}. SOL: ${sol.toFixed(4)}. Network: ${network}. Be concise and helpful. Never ask for private keys or seed phrases.`
+    const history: ChatMessage[] = [
+      { id: 'sys', role: 'system', content: systemPrompt, timestamp: 0 },
+      ...messages.slice(-16),
+      userMsg,
+    ]
 
     abortRef.current = new AbortController()
-
     try {
       await streamChat(
         history,
         apiKey,
         'openai/gpt-4o-mini',
-        (chunk) => {
-          setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m))
-        },
+        chunk => setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, content: m.content + chunk } : m)),
         () => setIsStreaming(false),
         abortRef.current.signal
       )
     } catch (e: any) {
       const isAbort = e?.name === 'AbortError'
-      const errorText = isAbort ? '' : (e?.message ?? 'Something went wrong — try again')
-      setMessages(prev => prev.map(m =>
-        m.id === assistantMsg.id ? { ...m, content: errorText } : m
-      ))
+      if (!isAbort) {
+        updateMsg(setMessages, assistantMsg.id, { content: e?.message ?? 'Something went wrong — try again' })
+      }
       setIsStreaming(false)
       if (!isAbort) throw e
     }
-  }, [messages])
+  }, [messages, account, keypair, network, balances])
+
+  const confirmAction = useCallback(async (messageId: string) => {
+    const msg = messages.find(m => m.id === messageId)
+    if (!msg?.action) return
+
+    updateMsg(setMessages, messageId, { actionState: 'executing' })
+
+    try {
+      if (!keypair) throw new Error('Wallet is locked — unlock first')
+
+      const { kind, params } = msg.action as any
+
+      if (kind === 'send') {
+        const sig = params.token === 'SOL'
+          ? await sendSol(keypair, params.recipient, params.amount, network)
+          : await sendUsdc(keypair, params.recipient, params.amount, network)
+        updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
+      }
+
+      else if (kind === 'swap') {
+        // Always re-fetch quote to avoid staleness
+        const freshQuote = await getSwapQuote(params.inputToken, params.outputToken, params.inputAmount, params.slippageBps)
+        const sig = await executeSwap(freshQuote, keypair, network)
+        updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
+      }
+
+      else if (kind === 'schedule') {
+        await addScheduledJob({
+          action: params.action,
+          intervalMs: params.intervalMs,
+          intervalLabel: params.intervalLabel,
+          nextRun: params.nextRun,
+        })
+        ensureSchedulerAlarm()
+        updateMsg(setMessages, messageId, { actionState: 'done' })
+      }
+
+      else if (kind === 'conditional') {
+        await addConditionalOrder({
+          token: params.token,
+          condition: params.condition,
+          targetPriceUsd: params.targetPriceUsd,
+          action: params.action,
+          actionLabel: params.actionLabel,
+        })
+        ensurePriceAlarm()
+        updateMsg(setMessages, messageId, { actionState: 'done' })
+      }
+
+      else if (kind === 'balance') {
+        updateMsg(setMessages, messageId, { actionState: 'done' })
+      }
+
+    } catch (e: any) {
+      const raw = e?.message ?? 'Transaction failed'
+      const errorMessage = raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation')
+        ? 'Quote expired — tap Try Again for a fresh rate'
+        : raw
+      updateMsg(setMessages, messageId, { actionState: 'error', errorMessage })
+    }
+  }, [messages, keypair, network])
+
+  const cancelAction = useCallback((messageId: string) => {
+    updateMsg(setMessages, messageId, { actionState: 'cancelled' })
+  }, [])
 
   const clearMessages = useCallback(() => setMessages([]), [])
-  const abort = useCallback(() => { abortRef.current?.abort(); setIsStreaming(false) }, [])
+  const abort = useCallback(() => {
+    abortRef.current?.abort()
+    setIsStreaming(false)
+  }, [])
 
   return (
-    <AIContext.Provider value={{ messages, isStreaming, sendMessage, clearMessages, abort }}>
+    <AIContext.Provider value={{ messages, isStreaming, sendMessage, confirmAction, cancelAction, clearMessages, abort }}>
       {children}
     </AIContext.Provider>
   )

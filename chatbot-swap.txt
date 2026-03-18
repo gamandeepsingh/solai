@@ -1,0 +1,152 @@
+Build a chat-based agent that can:
+
+Send tokens
+
+Swap tokens
+
+Check balances
+
+Perform basic wallet actions
+👉 Before any transaction → show confirmation card in chat
+
+🏗️ 1. High-Level Architecture
+User (Chat UI)
+   ↓
+Agent (LLM + Intent Parser)
+   ↓
+Action Layer (Handlers)
+   ↓
+Solana SDK (web3.js / Anchor)
+   ↓
+Wallet (Keypair / Adapter)
+🧩 Core Components
+1. Chat UI (React)
+
+Minimal, cartoon-ish UI (like your reference)
+
+Messages + Action Cards (important)
+
+2. Agent Layer
+
+Converts user intent → structured action
+
+Example:
+
+"Send 0.5 SOL to Ghost"
+↓
+{
+  action: "send",
+  amount: 0.5,
+  token: "SOL",
+  to: "wallet_address"
+}
+3. Action Executor
+
+Handles:
+
+send
+
+swap
+
+balance
+
+history (optional)
+
+4. Blockchain Layer
+
+Use:
+
+@solana/web3.js
+
+@solana/wallet-adapter
+
+@coral-xyz/anchor (optional)
+
+💬 2. UX Flow (IMPORTANT)
+🟢 Chat → Confirmation → Execution
+Step 1: User input
+"Swap 1 SOL to USDC"
+Step 2: Show Confirmation Card (MANDATORY)
+Writing
+
+💱 Swap Request
+
+From: SOL
+To: USDC
+Amount: 1 SOL
+Estimated Output: ~98 USDC
+
+[ Confirm ✅ ] [ Cancel ❌ ]
+
+👉 NO transaction should execute without this
+
+Step 3: Execute after confirm
+
+Build transaction
+
+Sign via wallet
+
+Send to Solana
+
+Step 4: Response
+✅ Swap successful!
+Tx: https://solscan.io/tx/...
+
+
+🔄 B. Swap Functionality (KEY PART)
+🔥 Best way: Use Aggregator APIs
+
+Instead of building AMM yourself → use:
+
+Jupiter API (BEST for Solana)
+
+🧠 Swap Flow
+User → Agent → Jupiter Quote → Show Card → Execute Swap
+🛰️ Step 1: Get Swap Quote
+const quote = await fetch(
+  `https://quote-api.jup.ag/v6/quote?inputMint=SOL&outputMint=USDC&amount=1000000000`
+).then(res => res.json());
+📊 Step 2: Show in Confirmation Card
+Writing
+
+💱 Swap Preview
+
+Input: 1 SOL
+Output: ~98 USDC
+Slippage: 0.5%
+Route: Jupiter
+
+[ Confirm Swap ] [ Cancel ]
+
+⚡ Step 3: Execute Swap
+const swapTx = await fetch("https://quote-api.jup.ag/v6/swap", {
+  method: "POST",
+  body: JSON.stringify({
+    quoteResponse: quote,
+    userPublicKey: wallet.publicKey.toString(),
+  }),
+}).then(res => res.json());
+
+// Deserialize + send
+🔐 Important:
+
+Always include slippage control
+
+Always show estimated output
+
+Always confirm before execution
+
+
+🔐 7. Security (DON’T SKIP)
+
+Never auto-execute transactions
+
+Always:
+
+Show amount
+
+Show token
+
+Show receiver
+
+Use wallet adapter (no private key handling)
