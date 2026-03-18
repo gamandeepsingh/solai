@@ -67,6 +67,7 @@ export default function SendScreen() {
                 value={recipient}
                 onChange={e => { setRecipient(e.target.value); setError('') }}
                 error={error}
+                onKeyDown={e => e.key === 'Enter' && goAddress()}
               />
               <div className="flex gap-2">
                 <button
@@ -96,6 +97,7 @@ export default function SendScreen() {
                 value={amount}
                 onChange={e => { setAmount(e.target.value); setError('') }}
                 error={error}
+                onKeyDown={e => e.key === 'Enter' && goConfirm()}
                 rightElement={
                   <button onClick={() => setAmount(String(tokenBalance))} className="text-[10px] text-primary font-medium">MAX</button>
                 }
@@ -124,7 +126,14 @@ export default function SendScreen() {
                 <span className="text-3xl">✓</span>
               </div>
               <h2 className="text-xl font-bold">Sent!</h2>
-              <p className="text-xs opacity-40 text-center font-mono break-all">{txSig}</p>
+              <a
+                href={`https://solscan.io/tx/${txSig}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary underline"
+              >
+                View on Solscan →
+              </a>
               <Button onClick={() => navigate('/home')}>Back to Home</Button>
             </motion.div>
           )}

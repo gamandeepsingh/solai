@@ -43,3 +43,22 @@ export async function getSync<K extends keyof SyncData>(key: K): Promise<SyncDat
 export async function setSync<K extends keyof SyncData>(key: K, value: SyncData[K]): Promise<void> {
   return new Promise(resolve => chrome.storage.sync.set({ [key]: value }, resolve))
 }
+
+type SessionData = {
+  walletSession: { secretKey: number[]; expiresAt: number }
+  chatSession: { messages: unknown[]; expiresAt: number }
+}
+
+export async function getSession<K extends keyof SessionData>(key: K): Promise<SessionData[K] | undefined> {
+  return new Promise(resolve => {
+    chrome.storage.session.get(key, result => resolve(result[key]))
+  })
+}
+
+export async function setSession<K extends keyof SessionData>(key: K, value: SessionData[K]): Promise<void> {
+  return new Promise(resolve => chrome.storage.session.set({ [key]: value }, resolve))
+}
+
+export async function removeSession(key: keyof SessionData): Promise<void> {
+  return new Promise(resolve => chrome.storage.session.remove(key as string, resolve))
+}

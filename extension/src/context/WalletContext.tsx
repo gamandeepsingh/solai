@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import nacl from 'tweetnacl'
-import bs58 from 'bs58'
 import type { WalletAccount, Network } from '../types/wallet'
-import { getLocal, setLocal, getSync, setSync } from '../lib/storage'
+import { getLocal, setLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
 import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair } from '../lib/wallet'
 import { authenticate } from '../lib/api'
+
+const SESSION_TTL = 5 * 60 * 1000
 
 interface WalletContextValue {
   account: WalletAccount | null
@@ -15,12 +16,19 @@ interface WalletContextValue {
   createWallet: (password: string) => Promise<string>
   importWallet: (mnemonic: string, password: string) => Promise<void>
   unlock: (password: string) => Promise<void>
-  lock: () => void
+  lock: () => Promise<void>
   setNetwork: (n: Network) => void
   init: () => Promise<{ hasWallet: boolean }>
 }
 
 const WalletContext = createContext<WalletContextValue>(null!)
+
+async function saveKeypairSession(kp: nacl.SignKeyPair) {
+  await setSession('walletSession', {
+    secretKey: Array.from(kp.secretKey),
+    expiresAt: Date.now() + SESSION_TTL,
+  })
+}
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<WalletAccount | null>(null)
@@ -33,10 +41,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const keystore = await getLocal('keystore')
     const savedNetwork = await getSync('network')
     const walletName = await getSync('walletName')
-    if (savedNetwork) setNetworkState(savedNetwork)
+    if (savedNetwork && savedNetwork !== ('testnet' as Network)) setNetworkState(savedNetwork)
     if (!keystore) { setIsLoading(false); return { hasWallet: false } }
     setAccount({ name: walletName ?? 'My Wallet', publicKey: keystore.publicKey, keystore })
-    setIsLocked(true)
+
+    const session = await getSession('walletSession')
+    if (session && session.expiresAt > Date.now()) {
+      const kp = nacl.sign.keyPair.fromSecretKey(new Uint8Array(session.secretKey))
+      setKeypair(kp)
+      setIsLocked(false)
+      await saveKeypairSession(kp)
+    } else {
+      setIsLocked(true)
+    }
+
     setIsLoading(false)
     return { hasWallet: true }
   }, [])
@@ -50,6 +68,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setKeypair(kp)
     setAccount({ name: 'My Wallet', publicKey: keystore.publicKey, keystore })
     setIsLocked(false)
+    await saveKeypairSession(kp)
     try { await authenticate(kp) } catch {}
     return mnemonic
   }, [])
@@ -62,6 +81,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setKeypair(kp)
     setAccount({ name: 'My Wallet', publicKey: keystore.publicKey, keystore })
     setIsLocked(false)
+    await saveKeypairSession(kp)
     try { await authenticate(kp) } catch {}
   }, [])
 
@@ -71,12 +91,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const kp = await unlockKeystore(keystore, password)
     setKeypair(kp)
     setIsLocked(false)
+    await saveKeypairSession(kp)
     try { await authenticate(kp) } catch {}
   }, [])
 
-  const lock = useCallback(() => {
+  const lock = useCallback(async () => {
     setKeypair(null)
     setIsLocked(true)
+    await removeSession('walletSession')
   }, [])
 
   const setNetwork = useCallback((n: Network) => {

@@ -1,12 +1,13 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { streamChat } from '../lib/openrouter'
 import { runAgentTurn } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { sendSol, sendUsdc } from '../lib/solana'
 import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
-import { getSync } from '../lib/storage'
+import { getSync, getSession, setSession } from '../lib/storage'
 import { useWallet } from './WalletContext'
 import { useBalance } from '../hooks/useBalance'
+import { useToast } from '../components/ui/Toast'
 import type { ChatMessage } from '../types/ai'
 import type { ActionParams } from '../types/agent'
 
@@ -33,9 +34,24 @@ function updateMsg(
 export function AIProvider({ children }: { children: ReactNode }) {
   const { keypair, network, account } = useWallet()
   const { balances } = useBalance()
+  const { toast } = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    getSession('chatSession').then(s => {
+      if (s && s.expiresAt > Date.now() && (s.messages as ChatMessage[]).length > 0) {
+        setMessages(s.messages as ChatMessage[])
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      setSession('chatSession', { messages: messages as unknown[], expiresAt: Date.now() + 5 * 60 * 1000 })
+    }
+  }, [messages])
 
   const sendMessage = useCallback(async (content: string) => {
     const apiKey = await getSync('openrouterApiKey')
@@ -131,13 +147,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
           ? await sendSol(keypair, params.recipient, params.amount, network)
           : await sendUsdc(keypair, params.recipient, params.amount, network)
         updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
+        toast('Sent successfully!', 'success')
       }
 
       else if (kind === 'swap') {
-        // Always re-fetch quote to avoid staleness
+        // Jupiter only works on mainnet
+        if (network !== 'mainnet') throw new Error('Swaps require mainnet — go to Settings → Network → Mainnet')
         const freshQuote = await getSwapQuote(params.inputToken, params.outputToken, params.inputAmount, params.slippageBps)
-        const sig = await executeSwap(freshQuote, keypair, network)
+        const sig = await executeSwap(freshQuote, keypair)
         updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
+        toast('Swap complete!', 'success')
       }
 
       else if (kind === 'schedule') {
@@ -149,6 +168,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         })
         ensureSchedulerAlarm()
         updateMsg(setMessages, messageId, { actionState: 'done' })
+        toast('Recurring payment scheduled!', 'success')
       }
 
       else if (kind === 'conditional') {
@@ -161,6 +181,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         })
         ensurePriceAlarm()
         updateMsg(setMessages, messageId, { actionState: 'done' })
+        toast('Conditional order set!', 'success')
       }
 
       else if (kind === 'balance') {
@@ -173,6 +194,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         ? 'Quote expired — tap Try Again for a fresh rate'
         : raw
       updateMsg(setMessages, messageId, { actionState: 'error', errorMessage })
+      toast(errorMessage, 'error')
     }
   }, [messages, keypair, network])
 

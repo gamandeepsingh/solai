@@ -1,10 +1,18 @@
-import { Connection, VersionedTransaction, Keypair } from '@solana/web3.js'
+import { VersionedTransaction, Keypair } from '@solana/web3.js'
 import type { SignKeyPair } from 'tweetnacl'
 import type { Network } from '../types/wallet'
 import { getConnection } from './solana'
 
-const QUOTE_URL = 'https://quote-api.jup.ag/v6/quote'
-const SWAP_URL = 'https://quote-api.jup.ag/v6/swap'
+const QUOTE_URL = 'https://api.jup.ag/swap/v1/quote'
+const SWAP_URL  = 'https://api.jup.ag/swap/v1/swap'
+const JUP_KEY   = import.meta.env.VITE_JUP_API_KEY
+
+function jupHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    ...(JUP_KEY ? { 'x-api-key': JUP_KEY } : {}),
+    ...extra,
+  }
+}
 
 const MINT: Record<'SOL' | 'USDC', string> = {
   SOL: 'So11111111111111111111111111111111111111112',
@@ -37,7 +45,12 @@ export async function getSwapQuote(
 ): Promise<JupiterQuote> {
   const lamports = Math.floor(inputAmount * DECIMALS[inputToken])
   const url = `${QUOTE_URL}?inputMint=${MINT[inputToken]}&outputMint=${MINT[outputToken]}&amount=${lamports}&slippageBps=${slippageBps}`
-  const res = await fetch(url)
+  let res: Response
+  try {
+    res = await fetch(url, { headers: jupHeaders() })
+  } catch {
+    throw new Error('Could not reach Jupiter — reload the extension and try again')
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body?.error ?? `Jupiter quote error ${res.status}`)
@@ -55,14 +68,14 @@ export function parseQuoteForDisplay(quote: JupiterQuote, outputToken: 'SOL' | '
 
 export async function executeSwap(
   quote: JupiterQuote,
-  naclKeypair: SignKeyPair,
-  network: Network
+  naclKeypair: SignKeyPair
 ): Promise<string> {
+  const network: Network = 'mainnet'
   const solanaKeypair = Keypair.fromSecretKey(naclKeypair.secretKey)
 
   const res = await fetch(SWAP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jupHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       quoteResponse: quote,
       userPublicKey: solanaKeypair.publicKey.toString(),
@@ -83,6 +96,7 @@ export async function executeSwap(
     skipPreflight: false,
     preflightCommitment: 'confirmed',
   })
-  await conn.confirmTransaction(sig, 'confirmed')
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash()
+  await conn.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed')
   return sig
 }

@@ -154,7 +154,8 @@ SOL balance: ${ctx.solBalance.toFixed(4)} SOL
 USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC
 
 For actionable requests (send, swap, schedule, balance check, conditional orders) — call the appropriate tool.
-For general questions — reply in plain text.
+For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — reply in plain text.
+For anything unrelated to crypto or wallets (math, essays, general knowledge, etc.) — politely decline and remind the user you are a wallet assistant.
 When user says "$X" or "X dollars", set amountIsUsd=true.
 When user names a contact (e.g. "mom", "Alice"), pass the name as-is to recipient.
 Never ask for private keys or seed phrases.`
@@ -175,6 +176,10 @@ Never ask for private keys or seed phrases.`
   switch (call.function.name) {
     case 'send_token': {
       const params = await resolveSendParams(args)
+      const available = params.token === 'SOL' ? ctx.solBalance : ctx.usdcBalance
+      if (params.amount > available) {
+        throw new Error(`Insufficient ${params.token} — you have ${params.token === 'SOL' ? ctx.solBalance.toFixed(4) : ctx.usdcBalance.toFixed(2)} ${params.token}`)
+      }
       return { kind: 'send', params }
     }
 

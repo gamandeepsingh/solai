@@ -10,6 +10,7 @@ import OnboardingConfirm from '../screens/Onboarding/MnemonicConfirm'
 import OnboardingImport from '../screens/Onboarding/ImportWallet'
 import HomeScreen from '../screens/Home'
 import SendScreen from '../screens/Send'
+import SwapScreen from '../screens/Swap'
 import ReceiveScreen from '../screens/Receive'
 import ContactsScreen from '../screens/Contacts'
 import AIChatScreen from '../screens/AIChat'
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/home" element={<HomeScreen />} />
       <Route path="/send" element={<SendScreen />} />
+      <Route path="/swap" element={<SwapScreen />} />
       <Route path="/receive" element={<ReceiveScreen />} />
       <Route path="/contacts" element={<ContactsScreen />} />
       <Route path="/ai" element={<AIChatScreen />} />
@@ -70,15 +72,15 @@ export default function Popup() {
   return (
     <ThemeProvider>
       <WalletProvider>
-        <AIProvider>
-          <MemoryRouter>
-            <div className="w-[360px] h-[600px] overflow-hidden relative bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
-              <ToastProvider>
+        <MemoryRouter>
+          <div className="w-[360px] h-[600px] overflow-hidden relative bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
+            <ToastProvider>
+              <AIProvider>
                 <AppRoutes />
-              </ToastProvider>
-            </div>
-          </MemoryRouter>
-        </AIProvider>
+              </AIProvider>
+            </ToastProvider>
+          </div>
+        </MemoryRouter>
       </WalletProvider>
     </ThemeProvider>
   )

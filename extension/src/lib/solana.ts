@@ -5,9 +5,8 @@ import type { Network } from '../types/wallet'
 import { USDC_MINT } from './tokens'
 
 const ENDPOINTS: Record<Network, string> = {
-  mainnet: 'https://api.mainnet-beta.solana.com',
-  devnet: 'https://api.devnet.solana.com',
-  testnet: 'https://api.testnet.solana.com',
+  mainnet: import.meta.env.VITE_RPC_MAINNET || 'https://api.mainnet-beta.solana.com',
+  devnet:  import.meta.env.VITE_RPC_DEVNET  || 'https://api.devnet.solana.com',
 }
 
 let _connection: Connection | null = null

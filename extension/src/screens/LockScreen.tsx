@@ -54,6 +54,7 @@ export default function LockScreen() {
             value={password}
             onChange={e => { setPassword(e.target.value); setError('') }}
             error={error}
+            autoFocus
             onKeyDown={e => e.key === 'Enter' && handleUnlock()}
           />
         </div>

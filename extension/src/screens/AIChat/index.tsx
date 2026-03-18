@@ -26,7 +26,10 @@ export default function AIChatScreen() {
 
   useEffect(() => {
     const initial = (location.state as any)?.initialMessage
-    if (initial && hasKey) handleSend(initial)
+    if (initial && hasKey) {
+      setInput('')
+      handleSend(initial)
+    }
   }, [hasKey])
 
   async function handleSend(text: string) {

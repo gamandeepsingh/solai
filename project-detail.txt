@@ -1,0 +1,234 @@
+Build a minimal, beautiful Chrome extension wallet UI for Solana called SOLAI Wallet.
+
+The design should feel:
+
+clean and minimal like Apple
+
+playful and soft like the attached reference (blob shapes, soft colors)
+
+slightly cartoonish but still premium
+
+very simple UX (non-technical users should feel comfortable)
+
+🎯 Product Scope (IMPORTANT)
+
+This is MVP v1.
+
+Only support:
+
+Solana wallet
+
+Send / Receive tokens
+
+View balance
+
+Save contacts
+
+Basic AI input box(use open router API key: Store OpenAI key locally in browser(user enters their own API key)
+Call OpenAI directly from client)
+
+Do NOT build EVM yet.
+
+🎨 Design System
+Themes
+
+Support both:
+
+Light mode
+
+Dark mode
+
+Colors
+
+Primary color:
+
+#ABFF7A
+
+Light mode:
+
+Background: #F7F7F7
+
+Text: #000000
+
+Soft blobs: pastel colors (pink, green, blue, purple)
+
+Dark mode:
+
+Background: #000000
+
+Text: #FFFFFF
+
+Blobs: muted neon pastel (with slight glow)
+
+Style
+
+Rounded corners everywhere
+
+Soft shadows (very subtle)
+
+Blob shapes like in reference image
+
+Slight rotation of elements (playful feel)
+
+Clean typography (Inter / SF Pro)
+
+🧩 UI Layout (Chrome Extension)
+
+Width: ~360px
+Height: ~600px
+
+1️⃣ Header
+
+Small avatar (wallet profile)
+
+Wallet name: “SOLAI”
+
+Network: Solana
+
+Dropdown for accounts
+
+2️⃣ Main Card (Balance)
+
+Center:
+
+Total balance (large text)
+
+Token symbol (SOL)
+
+Behind it:
+
+Soft animated blob (like reference)
+
+Blob changes slightly on hover
+
+3️⃣ Token List
+
+Simple list:
+
+SOL
+
+USDC (SPL)
+
+Each row:
+
+token icon
+
+name
+
+balance
+
+small change indicator
+
+4️⃣ Actions
+
+Buttons:
+
+Send
+
+Receive
+
+Swap (UI only for now)
+
+Style:
+
+pill buttons
+
+primary = #ABFF7A
+
+hover glow effect
+
+5️⃣ Chat / AI Input (Important)
+
+At bottom:
+
+Input box:
+
+Ask SOLAI anything...
+
+Design like:
+
+ChatGPT input
+
+rounded
+
+minimal
+
+✨ Animation Requirements
+
+Use:
+
+Framer Motion
+
+Animations:
+
+Blob slowly morphing
+
+Balance fades in
+
+Buttons scale on hover
+
+Page transitions smooth
+
+🧠 UX Philosophy
+
+No clutter
+
+No technical jargon
+
+Everything should feel “friendly”
+
+Slight playful tilt/rotation like reference image
+
+⚙️ Tech Stack
+
+React
+MongoDb for backend
+TailwindCSS
+
+Framer Motion
+
+Chrome Extension (Manifest v3)
+
+📁 File Structure
+
+Use:
+
+@solana/web3.js
+
+Features:
+
+create wallet
+
+import wallet
+
+show balance
+
+🎯 Output Requirements
+
+Return:
+
+Full React component code
+
+Tailwind styling
+
+Dark + light mode toggle
+
+Chrome extension ready structure
+
+🧠 Extra Polish
+
+Add soft floating particles
+
+Add subtle gradient glow
+
+Add tiny micro-interactions
+
+💬 Tone Reminder
+
+This is NOT a serious finance app UI.
+It should feel:
+
+👉 friendly
+👉 simple
+👉 slightly fun
+👉 but still premium
