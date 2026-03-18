@@ -24,7 +24,14 @@ export async function streamChat(
     signal,
   })
 
-  if (!res.ok) throw new Error(`OpenRouter error: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    const msg = body?.error?.message ?? ''
+    if (res.status === 401) throw new Error('Invalid API key — check Settings')
+    if (res.status === 429) throw new Error('Rate limit reached — try again in a moment')
+    if (res.status === 402) throw new Error('Insufficient credits on OpenRouter')
+    throw new Error(msg || `OpenRouter error ${res.status}`)
+  }
 
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()

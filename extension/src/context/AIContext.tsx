@@ -32,7 +32,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     setIsStreaming(true)
 
     const history: ChatMessage[] = systemContext
-      ? [{ id: 'sys', role: 'assistant', content: systemContext, timestamp: 0 }, ...messages.slice(-18), userMsg]
+      ? [{ id: 'sys', role: 'system', content: systemContext, timestamp: 0 }, ...messages.slice(-18), userMsg]
       : [...messages.slice(-18), userMsg]
 
     abortRef.current = new AbortController()
@@ -48,8 +48,14 @@ export function AIProvider({ children }: { children: ReactNode }) {
         () => setIsStreaming(false),
         abortRef.current.signal
       )
-    } catch {
+    } catch (e: any) {
+      const isAbort = e?.name === 'AbortError'
+      const errorText = isAbort ? '' : (e?.message ?? 'Something went wrong — try again')
+      setMessages(prev => prev.map(m =>
+        m.id === assistantMsg.id ? { ...m, content: errorText } : m
+      ))
       setIsStreaming(false)
+      if (!isAbort) throw e
     }
   }, [messages])
 
