@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "SOLAI Wallet",
+  "version": "1.0.0",
+  "description": "Your friendly Solana wallet",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "32":  "icons/icon32.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts"
+  },
+  "permissions": ["storage", "alarms", "clipboardWrite"],
+  "host_permissions": [
+    "https://api.mainnet-beta.solana.com/*",
+    "https://api.devnet.solana.com/*",
+    "https://api.testnet.solana.com/*",
+    "https://openrouter.ai/*",
+    "http://localhost:4000/*"
+  ]
+}
