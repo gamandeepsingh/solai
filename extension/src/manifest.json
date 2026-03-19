@@ -29,6 +29,7 @@
     "http://localhost:4000/*",
     "https://quote-api.jup.ag/*",
     "https://api.jup.ag/*",
-    "https://api.coingecko.com/*"
+    "https://api.coingecko.com/*",
+    "https://mainnet.helius-rpc.com/*"
   ]
 }

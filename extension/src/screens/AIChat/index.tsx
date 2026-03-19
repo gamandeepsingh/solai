@@ -97,7 +97,7 @@ export default function AIChatScreen() {
                   onCancel={() => cancelAction(msg.id)}
                 />
               ) : (
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
                   msg.role === 'user'
                     ? 'bg-primary text-black rounded-br-sm'
                     : 'bg-[var(--color-card)] border border-[var(--color-border)] rounded-bl-sm'
