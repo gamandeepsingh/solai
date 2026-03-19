@@ -45,7 +45,7 @@ export type ActionParams =
   | { kind: 'swap'; params: SwapParams }
   | { kind: 'schedule'; params: ScheduleParams }
   | { kind: 'conditional'; params: ConditionalParams }
-  | { kind: 'balance'; params: { solBalance: number; usdcBalance: number; usdtBalance: number } }
+  | { kind: 'balance'; params: { solBalance: number; usdcBalance: number; usdtBalance: number; solUsdValue: number; totalUsdValue: number } }
   | { kind: 'add_contact'; params: AddContactParams }
   | { kind: 'list_schedules'; params: { jobs: ScheduledJob[] } }
 

@@ -18,13 +18,26 @@ async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
   const session = await chrome.storage.session.get('walletSession') as any
   const ws = session?.walletSession
   if (!ws || ws.expiresAt <= Date.now()) return null
-  return nacl.sign.keyPair.fromSecretKey(new Uint8Array(ws.secretKey))
+  // New multi-wallet format: { keypairs: Record<id, number[]>, expiresAt }
+  if (ws.keypairs) {
+    const { activeWalletId } = await chrome.storage.local.get('activeWalletId') as any
+    const sk = ws.keypairs[activeWalletId]
+    if (!sk) return null
+    return nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
+  }
+  // Legacy fallback: { secretKey: number[], expiresAt }
+  if (ws.secretKey) return nacl.sign.keyPair.fromSecretKey(new Uint8Array(ws.secretKey))
+  return null
 }
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'balance-refresh') {
-    const { keystore } = await chrome.storage.local.get('keystore') as any
-    if (!keystore) return
+    const local = await chrome.storage.local.get(['wallets', 'activeWalletId', 'keystore']) as any
+    const wallets = local.wallets as Array<{ id: string; keystore: { publicKey: string } }> | undefined
+    const activeId = local.activeWalletId as string | undefined
+    const activeWallet = wallets?.find(w => w.id === activeId) ?? wallets?.[0]
+    const publicKey = activeWallet?.keystore.publicKey ?? local.keystore?.publicKey
+    if (!publicKey) return
 
     const sync = await chrome.storage.sync.get('network') as any
     const network: Network = sync?.network ?? 'mainnet'
@@ -37,7 +50,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       const res = await fetch(endpoints[network] ?? endpoints.mainnet, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [keystore.publicKey] }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getBalance', params: [publicKey] }),
       })
       const { result } = await res.json()
       await chrome.storage.local.set({ cachedSolBalance: result.value / 1_000_000_000 })

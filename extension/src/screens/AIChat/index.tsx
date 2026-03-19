@@ -101,10 +101,74 @@ export default function AIChatScreen() {
           </div>
         )}
         {messages.length === 0 && hasKey && (
-          <div className="flex flex-col items-center gap-2 mt-10 text-center opacity-40">
-            <span className="text-3xl">✨</span>
-            <p className="text-sm">Ask me anything — or tell me what to do</p>
-            <p className="text-xs">"Swap 0.1 SOL to USDC" · "Send $5 to mom" · "Check my balance"</p>
+          <div className="flex flex-col items-center mt-12 text-center">
+
+            {/* Icon */}
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-primary"
+              >
+                <path d="M12 3l2.5 5L20 10l-5 2.5L12 18l-2.5-5L4 10l5-2.5L12 3z" />
+              </svg>
+            </div>
+
+            {/* Title */}
+            <p className="text-sm font-medium text-[var(--color-text)]/80">
+              What can I help you with?
+            </p>
+
+            {/* Subtitle */}
+            <p className="text-xs text-[var(--color-text)]/50 mt-1">
+              Try one of these
+            </p>
+
+            {/* Suggestions */}
+            <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-[260px]">
+              {[
+                { label: "Swap 0.1 SOL → USDC", icon: "swap" },
+                { label: "Send $5 to mom", icon: "send" },
+                { label: "Check my balance", icon: "wallet" },
+              ].map((item, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(item.label)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-card)]/60 hover:bg-[var(--color-card)] transition-all text-[var(--color-text)]"
+                >
+                  {item.icon === "swap" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 1l4 4-4 4" />
+                      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                      <path d="M7 23l-4-4 4-4" />
+                      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                    </svg>
+                  )}
+
+                  {item.icon === "send" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 2L11 13" />
+                      <path d="M22 2L15 22l-4-9-9-4 20-7z" />
+                    </svg>
+                  )}
+
+                  {item.icon === "wallet" && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="6" width="20" height="12" rx="2" />
+                      <path d="M16 12h.01" />
+                    </svg>
+                  )}
+
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -123,11 +187,10 @@ export default function AIChatScreen() {
                   onCancel={() => cancelAction(msg.id)}
                 />
               ) : (
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
-                  msg.role === 'user'
+                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${msg.role === 'user'
                     ? 'bg-primary text-black rounded-br-sm'
                     : 'bg-[var(--color-card)] border border-[var(--color-border)] rounded-bl-sm'
-                }`}>
+                  }`}>
                   {msg.content
                     ? msg.role === 'assistant'
                       ? <MarkdownText content={msg.content} />

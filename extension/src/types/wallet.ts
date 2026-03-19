@@ -8,6 +8,12 @@ export interface EncryptedKeystore {
   publicKey: string
 }
 
+export interface WalletEntry {
+  id: string
+  name: string
+  keystore: EncryptedKeystore
+}
+
 export interface WalletAccount {
   name: string
   publicKey: string

@@ -70,9 +70,10 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
     ]
 
     if (kind === 'balance') return [
-      { label: 'SOL', value: `${params.solBalance.toFixed(4)} SOL` },
+      { label: 'SOL', value: `${params.solBalance.toFixed(4)} SOL${params.solUsdValue ? ` (~$${params.solUsdValue.toFixed(2)})` : ''}` },
       { label: 'USDC', value: `${params.usdcBalance.toFixed(2)} USDC` },
       { label: 'USDT', value: `${params.usdtBalance.toFixed(2)} USDT` },
+      ...(params.totalUsdValue ? [{ label: 'Total', value: `$${params.totalUsdValue.toFixed(2)} USD` }] : []),
     ]
 
     if (kind === 'add_contact') return [

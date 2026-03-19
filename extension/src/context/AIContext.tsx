@@ -4,7 +4,7 @@ import { runAgentTurn } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
 import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
-import { getSync, getSession, setSession } from '../lib/storage'
+import { getSync, getLocal, setLocal, getSession, setSession } from '../lib/storage'
 import { logTx } from '../lib/history'
 import { createContact } from '../lib/api'
 import type { AgentResult } from '../lib/agent'
@@ -52,7 +52,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setSession('chatSession', { messages: messages as unknown[], expiresAt: Date.now() + 5 * 60 * 1000 })
+      setSession('chatSession', { messages: messages as unknown[], expiresAt: Date.now() + 30 * 60 * 1000 })
     }
   }, [messages])
 
@@ -69,12 +69,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
     const sol = balances.find(b => b.meta.symbol === 'SOL')?.amount ?? 0
     const usdc = balances.find(b => b.meta.symbol === 'USDC')?.amount ?? 0
     const usdt = balances.find(b => b.meta.symbol === 'USDT')?.amount ?? 0
+    const solUsdValue = balances.find(b => b.meta.symbol === 'SOL')?.usdValue ?? 0
+    const totalUsdValue = balances.reduce((sum, b) => sum + (b.usdValue ?? 0), 0)
     const ctx = {
       publicKey: account?.publicKey ?? '',
       network,
       solBalance: sol,
       usdcBalance: usdc,
       usdtBalance: usdt,
+      solUsdValue,
+      totalUsdValue,
     }
 
     // Phase 1: agent intent detection
@@ -118,7 +122,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }
     setMessages(prev => [...prev, assistantMsg])
 
-    const systemPrompt = `You are SOLAI, a friendly Solana wallet assistant. Wallet: ${ctx.publicKey}. SOL: ${sol.toFixed(4)}. Network: ${network}. Be concise and helpful. Never ask for private keys or seed phrases.`
+    const systemPrompt = `You are SOLAI, a friendly Solana wallet assistant. Wallet: ${ctx.publicKey}. Network: ${network}. Balances: ${sol.toFixed(4)} SOL, ${usdc.toFixed(2)} USDC, ${usdt.toFixed(2)} USDT. Be concise and helpful. Never ask for private keys or seed phrases.`
     const history: ChatMessage[] = [
       { id: 'sys', role: 'system', content: systemPrompt, timestamp: 0 },
       ...messages.slice(-16),
@@ -206,7 +210,9 @@ export function AIProvider({ children }: { children: ReactNode }) {
       }
 
       else if (kind === 'add_contact') {
-        await createContact({ name: params.name, address: params.address })
+        const contact = await createContact({ name: params.name, address: params.address })
+        const existing = await getLocal('contacts') ?? []
+        await setLocal('contacts', [...existing, contact])
         updateMsg(setMessages, messageId, { actionState: 'done' })
         toast(`Contact "${params.name}" added!`, 'success')
       }

@@ -17,6 +17,8 @@ export interface AgentContext {
   solBalance: number
   usdcBalance: number
   usdtBalance: number
+  solUsdValue: number
+  totalUsdValue: number
 }
 
 const INTERVAL_MAP: Record<string, number> = {
@@ -190,9 +192,10 @@ export async function runAgentTurn(
   const systemPrompt = `You are SOLAI, an agentic Solana wallet assistant.
 Wallet address: ${ctx.publicKey}
 Network: ${ctx.network}
-SOL balance: ${ctx.solBalance.toFixed(4)} SOL
-USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC
-USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT
+SOL balance: ${ctx.solBalance.toFixed(4)} SOL (~$${ctx.solUsdValue.toFixed(2)})
+USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC (~$${ctx.usdcBalance.toFixed(2)})
+USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT (~$${ctx.usdtBalance.toFixed(2)})
+Total portfolio: ~$${ctx.totalUsdValue.toFixed(2)} USD
 
 For actionable requests (send, swap, schedule, balance check, conditional orders) — call the appropriate tool.
 For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — reply in plain text.
@@ -284,7 +287,13 @@ Never ask for private keys or seed phrases.`
     case 'get_balance': {
       return {
         kind: 'balance',
-        params: { solBalance: ctx.solBalance, usdcBalance: ctx.usdcBalance, usdtBalance: ctx.usdtBalance },
+        params: {
+          solBalance: ctx.solBalance,
+          usdcBalance: ctx.usdcBalance,
+          usdtBalance: ctx.usdtBalance,
+          solUsdValue: ctx.solUsdValue,
+          totalUsdValue: ctx.totalUsdValue,
+        },
       }
     }
 

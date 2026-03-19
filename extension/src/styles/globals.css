@@ -5,11 +5,11 @@
 :root {
   --color-bg: #F7F7F7;
   --color-text: #000000;
-  --color-primary: #ABFF7A;
+  --color-primary: #1F9D4C;
   --color-card: #FFFFFF;
   --color-border: rgba(0, 0, 0, 0.08);
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.06);
-  --shadow-glow: 0 0 20px rgba(171, 255, 122, 0.3);
+  --shadow-glow: 0 0 20px rgba(31, 157, 76, 0.25);
 }
 
 .dark {
@@ -43,7 +43,7 @@ body {
 
 @layer utilities {
   .glow-primary {
-    box-shadow: 0 0 20px rgba(171, 255, 122, 0.4);
+    box-shadow: var(--shadow-glow);
   }
   .card-bg {
     background-color: var(--color-card);

@@ -125,7 +125,7 @@ export default function SwapScreen() {
                       <button
                         key={t}
                         onClick={() => selectInputToken(t)}
-                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${inputToken === t ? 'bg-primary text-white' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
+                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${inputToken === t ? 'bg-primary text-black' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
                       >{t}</button>
                     ))}
                   </div>
@@ -147,7 +147,7 @@ export default function SwapScreen() {
                       <button
                         key={t}
                         onClick={() => selectOutputToken(t)}
-                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${outputToken === t ? 'bg-primary text-white' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
+                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${outputToken === t ? 'bg-primary text-black' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
                       >{t}</button>
                     ))}
                   </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getSolBalance, getUsdcBalance, getUsdtBalance } from '../lib/solana'
 import { getLocal, setLocal } from '../lib/storage'
 import { useWallet } from '../context/WalletContext'
+import { getSolPrice } from '../lib/prices'
 import type { TokenBalance } from '../types/tokens'
 import { SOL_META, USDC_META, USDT_META } from '../lib/tokens'
 
@@ -13,15 +14,16 @@ export function useBalance() {
   const fetchBalances = useCallback(async () => {
     if (!account?.publicKey) return
     try {
-      const [sol, usdc, usdt] = await Promise.all([
+      const [sol, usdc, usdt, solPrice] = await Promise.all([
         getSolBalance(account.publicKey, network),
         getUsdcBalance(account.publicKey, network),
         getUsdtBalance(account.publicKey, network),
+        getSolPrice().catch(() => 0),
       ])
       setBalances([
-        { meta: SOL_META, amount: sol },
-        { meta: USDC_META, amount: usdc },
-        { meta: USDT_META, amount: usdt },
+        { meta: SOL_META, amount: sol, usdValue: sol * solPrice },
+        { meta: USDC_META, amount: usdc, usdValue: usdc },
+        { meta: USDT_META, amount: usdt, usdValue: usdt },
       ])
       await setLocal('cachedSolBalance', sol)
       await setLocal('cachedUsdcBalance', usdc)

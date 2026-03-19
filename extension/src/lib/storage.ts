@@ -1,10 +1,12 @@
-import type { EncryptedKeystore, Network } from '../types/wallet'
+import type { EncryptedKeystore, Network, WalletEntry } from '../types/wallet'
 import type { Contact } from '../types/contacts'
 import type { ScheduledJob, ConditionalOrder } from '../types/agent'
 import type { TxRecord } from '../types/history'
 
 type LocalData = {
-  keystore: EncryptedKeystore
+  keystore: EncryptedKeystore        // legacy — kept for migration only
+  wallets: WalletEntry[]             // multi-wallet list
+  activeWalletId: string             // id of active wallet
   cachedSolBalance: number
   cachedUsdcBalance: number
   cachedUsdtBalance: number
@@ -48,7 +50,7 @@ export async function setSync<K extends keyof SyncData>(key: K, value: SyncData[
 }
 
 type SessionData = {
-  walletSession: { secretKey: number[]; expiresAt: number }
+  walletSession: { keypairs: Record<string, number[]>; expiresAt: number }
   chatSession: { messages: unknown[]; expiresAt: number }
 }
 
