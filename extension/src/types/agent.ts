@@ -1,4 +1,4 @@
-export type AgentToken = 'SOL' | 'USDC'
+export type AgentToken = 'SOL' | 'USDC' | 'USDT'
 export type ActionState = 'pending' | 'executing' | 'done' | 'cancelled' | 'error'
 
 export interface SendParams {
@@ -35,12 +35,19 @@ export interface ConditionalParams {
   actionLabel: string
 }
 
+export interface AddContactParams {
+  name: string
+  address: string
+}
+
 export type ActionParams =
   | { kind: 'send'; params: SendParams }
   | { kind: 'swap'; params: SwapParams }
   | { kind: 'schedule'; params: ScheduleParams }
   | { kind: 'conditional'; params: ConditionalParams }
-  | { kind: 'balance'; params: { solBalance: number; usdcBalance: number } }
+  | { kind: 'balance'; params: { solBalance: number; usdcBalance: number; usdtBalance: number } }
+  | { kind: 'add_contact'; params: AddContactParams }
+  | { kind: 'list_schedules'; params: { jobs: ScheduledJob[] } }
 
 export interface ScheduledJob {
   id: string

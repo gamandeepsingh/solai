@@ -31,8 +31,8 @@ export async function getSolPrice(): Promise<number> {
   return getTokenPrice('solana')
 }
 
-export async function convertUsdToToken(usdAmount: number, token: 'SOL' | 'USDC'): Promise<number> {
-  const coinId = token === 'SOL' ? 'solana' : 'usd-coin'
+export async function convertUsdToToken(usdAmount: number, token: 'SOL' | 'USDC' | 'USDT'): Promise<number> {
+  const coinId = token === 'SOL' ? 'solana' : token === 'USDC' ? 'usd-coin' : 'tether'
   const price = await getTokenPrice(coinId)
   if (!price) throw new Error('Could not fetch price — try again')
   return usdAmount / price

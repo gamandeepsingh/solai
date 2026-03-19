@@ -9,10 +9,13 @@ import { useWallet } from '../../context/WalletContext'
 import { useBalance } from '../../hooks/useBalance'
 import { useToast } from '../../components/ui/Toast'
 import { getSwapQuote, executeSwap, parseQuoteForDisplay } from '../../lib/jupiter'
+import { logTx } from '../../lib/history'
 import type { JupiterQuote } from '../../lib/jupiter'
 
-type Token = 'SOL' | 'USDC'
+type Token = 'SOL' | 'USDC' | 'USDT'
 type Step = 'form' | 'confirm' | 'done'
+
+const ALL_TOKENS: Token[] = ['SOL', 'USDC', 'USDT']
 
 export default function SwapScreen() {
   const navigate = useNavigate()
@@ -21,6 +24,7 @@ export default function SwapScreen() {
   const { toast } = useToast()
 
   const [inputToken, setInputToken] = useState<Token>('SOL')
+  const [outputToken, setOutputToken] = useState<Token>('USDC')
   const [amount, setAmount] = useState('')
   const [step, setStep] = useState<Step>('form')
   const [isLoading, setIsLoading] = useState(false)
@@ -29,7 +33,6 @@ export default function SwapScreen() {
   const [txSig, setTxSig] = useState('')
   const [error, setError] = useState('')
 
-  const outputToken: Token = inputToken === 'SOL' ? 'USDC' : 'SOL'
   const inputBalance = balances.find(b => b.meta.symbol === inputToken)?.amount ?? 0
 
   async function handleGetQuote() {
@@ -61,6 +64,7 @@ export default function SwapScreen() {
       setTxSig(sig)
       setStep('done')
       toast('Swap successful!', 'success')
+      logTx({ sig, type: 'swap', timestamp: Date.now(), amount: parseFloat(amount), token: `${inputToken}→${outputToken}`, status: 'success' })
     } catch (e: any) {
       const raw = e.message ?? 'Swap failed'
       const msg = raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation')
@@ -74,7 +78,27 @@ export default function SwapScreen() {
   }
 
   function flipTokens() {
+    const prev = inputToken
     setInputToken(outputToken)
+    setOutputToken(prev)
+    setAmount('')
+    setQuote(null)
+    setQuoteDisplay(null)
+    setError('')
+  }
+
+  function selectInputToken(t: Token) {
+    setInputToken(t)
+    if (t === outputToken) setOutputToken(ALL_TOKENS.find(x => x !== t) ?? 'USDC')
+    setAmount('')
+    setQuote(null)
+    setQuoteDisplay(null)
+    setError('')
+  }
+
+  function selectOutputToken(t: Token) {
+    setOutputToken(t)
+    if (t === inputToken) setInputToken(ALL_TOKENS.find(x => x !== t) ?? 'SOL')
     setAmount('')
     setQuote(null)
     setQuoteDisplay(null)
@@ -96,7 +120,15 @@ export default function SwapScreen() {
               <div className="flex gap-3 items-center">
                 <div className="flex-1">
                   <p className="text-[10px] opacity-40 mb-1.5">From</p>
-                  <div className="card-bg rounded-2xl px-4 py-3 font-semibold text-sm border border-[var(--color-border)]">{inputToken}</div>
+                  <div className="flex gap-1">
+                    {ALL_TOKENS.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => selectInputToken(t)}
+                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${inputToken === t ? 'bg-primary text-white' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
+                      >{t}</button>
+                    ))}
+                  </div>
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.85, rotate: 180 }}
@@ -110,7 +142,15 @@ export default function SwapScreen() {
                 </motion.button>
                 <div className="flex-1">
                   <p className="text-[10px] opacity-40 mb-1.5">To</p>
-                  <div className="card-bg rounded-2xl px-4 py-3 font-semibold text-sm border border-[var(--color-border)]">{outputToken}</div>
+                  <div className="flex gap-1">
+                    {ALL_TOKENS.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => selectOutputToken(t)}
+                        className={`flex-1 rounded-xl py-2.5 text-xs font-semibold transition-colors ${outputToken === t ? 'bg-primary text-white' : 'card-bg border border-[var(--color-border)] opacity-50'}`}
+                      >{t}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

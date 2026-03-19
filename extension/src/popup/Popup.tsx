@@ -13,6 +13,7 @@ import SendScreen from '../screens/Send'
 import SwapScreen from '../screens/Swap'
 import ReceiveScreen from '../screens/Receive'
 import ContactsScreen from '../screens/Contacts'
+import HistoryScreen from '../screens/History'
 import AIChatScreen from '../screens/AIChat'
 import SettingsScreen from '../screens/Settings'
 import LockScreen from '../screens/LockScreen'
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/swap" element={<SwapScreen />} />
       <Route path="/receive" element={<ReceiveScreen />} />
       <Route path="/contacts" element={<ContactsScreen />} />
+      <Route path="/history" element={<HistoryScreen />} />
       <Route path="/ai" element={<AIChatScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />

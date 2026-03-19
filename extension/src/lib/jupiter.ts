@@ -1,6 +1,7 @@
 import { VersionedTransaction, Keypair } from '@solana/web3.js'
 import type { SignKeyPair } from 'tweetnacl'
 import type { Network } from '../types/wallet'
+import type { AgentToken } from '../types/agent'
 import { getConnection } from './solana'
 
 const QUOTE_URL = 'https://api.jup.ag/swap/v1/quote'
@@ -14,12 +15,13 @@ function jupHeaders(extra: Record<string, string> = {}): Record<string, string> 
   }
 }
 
-const MINT: Record<'SOL' | 'USDC', string> = {
-  SOL: 'So11111111111111111111111111111111111111112',
+const MINT: Record<AgentToken, string> = {
+  SOL:  'So11111111111111111111111111111111111111112',
   USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
 }
 
-const DECIMALS: Record<'SOL' | 'USDC', number> = { SOL: 1e9, USDC: 1e6 }
+const DECIMALS: Record<AgentToken, number> = { SOL: 1e9, USDC: 1e6, USDT: 1e6 }
 
 export interface JupiterQuote {
   inputMint: string
@@ -38,8 +40,8 @@ export interface QuoteDisplay {
 }
 
 export async function getSwapQuote(
-  inputToken: 'SOL' | 'USDC',
-  outputToken: 'SOL' | 'USDC',
+  inputToken: AgentToken,
+  outputToken: AgentToken,
   inputAmount: number,
   slippageBps = 50
 ): Promise<JupiterQuote> {
@@ -58,7 +60,7 @@ export async function getSwapQuote(
   return res.json()
 }
 
-export function parseQuoteForDisplay(quote: JupiterQuote, outputToken: 'SOL' | 'USDC'): QuoteDisplay {
+export function parseQuoteForDisplay(quote: JupiterQuote, outputToken: AgentToken): QuoteDisplay {
   return {
     estimatedOutput: Number(quote.outAmount) / DECIMALS[outputToken],
     priceImpactPct: Number(quote.priceImpactPct).toFixed(3),

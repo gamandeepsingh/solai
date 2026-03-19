@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { ChatMessage } from '../../types/ai'
+import type { ScheduledJob } from '../../types/agent'
+import { removeScheduledJob } from '../../lib/scheduler'
 import Spinner from '../ui/Spinner'
 
 interface Row {
@@ -69,6 +72,12 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
     if (kind === 'balance') return [
       { label: 'SOL', value: `${params.solBalance.toFixed(4)} SOL` },
       { label: 'USDC', value: `${params.usdcBalance.toFixed(2)} USDC` },
+      { label: 'USDT', value: `${params.usdtBalance.toFixed(2)} USDT` },
+    ]
+
+    if (kind === 'add_contact') return [
+      { label: 'Name', value: params.name },
+      { label: 'Address', value: `${params.address.slice(0, 8)}...${params.address.slice(-8)}` },
     ]
 
     return []
@@ -80,9 +89,15 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
     schedule: '🔁 Recurring Payment',
     conditional: '⚡ Conditional Order',
     balance: '💰 Wallet Balance',
+    add_contact: '👤 Add Contact',
+    list_schedules: '🔁 Recurring Payments',
   }
 
   const networkLabel = kind === 'swap' ? 'mainnet' : undefined
+
+  if (kind === 'list_schedules') {
+    return <ScheduleListCard jobs={params.jobs} />
+  }
 
   return (
     <motion.div
@@ -171,6 +186,52 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
           </motion.div>
         )}
       </AnimatePresence>
+    </motion.div>
+  )
+}
+
+function ScheduleListCard({ jobs }: { jobs: ScheduledJob[] }) {
+  const [cancelledIds, setCancelledIds] = useState<Set<string>>(new Set())
+
+  async function handleStop(id: string) {
+    await removeScheduledJob(id)
+    setCancelledIds(prev => new Set([...prev, id]))
+  }
+
+  const visible = jobs.filter(j => !cancelledIds.has(j.id))
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-[260px] rounded-3xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)]"
+    >
+      <div className="px-4 pt-3.5 pb-1 border-b border-[var(--color-border)]/50">
+        <p className="text-xs font-semibold">🔁 Recurring Payments</p>
+        <p className="text-[10px] opacity-30">{visible.length} active</p>
+      </div>
+
+      <div className="px-4 py-3 flex flex-col gap-2.5">
+        {visible.length === 0 ? (
+          <p className="text-xs opacity-40">All recurring payments stopped.</p>
+        ) : visible.map(job => (
+          <div key={job.id} className="flex items-center justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">
+                {job.action.amount.toFixed(job.action.token === 'SOL' ? 6 : 2)} {job.action.token} → {job.action.recipientLabel}
+              </p>
+              <p className="text-[10px] opacity-40">{job.intervalLabel}</p>
+            </div>
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={() => handleStop(job.id)}
+              className="shrink-0 px-2.5 py-1 rounded-xl text-[10px] font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Stop
+            </motion.button>
+          </div>
+        ))}
+      </div>
     </motion.div>
   )
 }

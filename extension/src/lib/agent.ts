@@ -4,15 +4,19 @@ import { fetchContacts } from './api'
 import { isValidSolanaAddress } from './solana'
 import { convertUsdToToken } from './prices'
 import { getSwapQuote, parseQuoteForDisplay } from './jupiter'
+import { getScheduledJobs } from './scheduler'
 import type { ChatMessage } from '../types/ai'
 import type { ActionParams, SendParams, AgentToken } from '../types/agent'
 import type { Network } from '../types/wallet'
+
+export type AgentResult = ActionParams | string | null
 
 export interface AgentContext {
   publicKey: string
   network: Network
   solBalance: number
   usdcBalance: number
+  usdtBalance: number
 }
 
 const INTERVAL_MAP: Record<string, number> = {
@@ -69,7 +73,7 @@ export const AGENT_TOOLS = [
         properties: {
           recipient: { type: 'string', description: 'Solana wallet address OR contact name (e.g. "Alice", "mom")' },
           amount: { type: 'number', description: 'Amount to send' },
-          token: { type: 'string', enum: ['SOL', 'USDC'] },
+          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
           amountIsUsd: { type: 'boolean', description: 'True if amount is in USD (e.g. "$5")' },
         },
         required: ['recipient', 'amount', 'token'],
@@ -84,8 +88,8 @@ export const AGENT_TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          inputToken: { type: 'string', enum: ['SOL', 'USDC'] },
-          outputToken: { type: 'string', enum: ['SOL', 'USDC'] },
+          inputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
+          outputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
           inputAmount: { type: 'number', description: 'Amount of input token to swap' },
           slippageBps: { type: 'number', description: 'Slippage in basis points, default 50' },
         },
@@ -103,7 +107,7 @@ export const AGENT_TOOLS = [
         properties: {
           recipient: { type: 'string' },
           amount: { type: 'number' },
-          token: { type: 'string', enum: ['SOL', 'USDC'] },
+          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
           amountIsUsd: { type: 'boolean' },
           intervalLabel: { type: 'string', description: 'One of: hourly, daily, weekly, monthly' },
         },
@@ -119,12 +123,12 @@ export const AGENT_TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          token: { type: 'string', enum: ['SOL', 'USDC'] },
+          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
           condition: { type: 'string', enum: ['below', 'above'] },
           targetPriceUsd: { type: 'number', description: 'Target price in USD that triggers the action' },
           actionKind: { type: 'string', enum: ['swap', 'send'] },
           actionAmount: { type: 'number' },
-          actionToken: { type: 'string', enum: ['SOL', 'USDC'] },
+          actionToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
         },
         required: ['token', 'condition', 'targetPriceUsd', 'actionKind', 'actionAmount', 'actionToken'],
       },
@@ -138,6 +142,42 @@ export const AGENT_TOOLS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'add_contact',
+      description: 'Save a new contact. Use when user says "add contact", "save this address as", "remember X address".',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Contact name' },
+          address: { type: 'string', description: 'Solana wallet address' },
+        },
+        required: ['name', 'address'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_contacts',
+      description: 'List saved contacts or look up a specific contact address. Use when user asks "show my contacts", "what is X address", "do I have X saved".',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Optional: filter by contact name' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_schedules',
+      description: 'Show all active recurring payments. Use when user asks "show my recurring payments", "what scheduled payments do I have", "list my recurring tasks".',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
 ]
 
 export async function runAgentTurn(
@@ -146,12 +186,13 @@ export async function runAgentTurn(
   apiKey: string,
   model: string,
   ctx: AgentContext
-): Promise<ActionParams | null> {
+): Promise<AgentResult> {
   const systemPrompt = `You are SOLAI, an agentic Solana wallet assistant.
 Wallet address: ${ctx.publicKey}
 Network: ${ctx.network}
 SOL balance: ${ctx.solBalance.toFixed(4)} SOL
 USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC
+USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT
 
 For actionable requests (send, swap, schedule, balance check, conditional orders) — call the appropriate tool.
 For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — reply in plain text.
@@ -176,9 +217,11 @@ Never ask for private keys or seed phrases.`
   switch (call.function.name) {
     case 'send_token': {
       const params = await resolveSendParams(args)
-      const available = params.token === 'SOL' ? ctx.solBalance : ctx.usdcBalance
-      if (params.amount > available) {
-        throw new Error(`Insufficient ${params.token} — you have ${params.token === 'SOL' ? ctx.solBalance.toFixed(4) : ctx.usdcBalance.toFixed(2)} ${params.token}`)
+      const available = params.token === 'SOL' ? ctx.solBalance : params.token === 'USDC' ? ctx.usdcBalance : ctx.usdtBalance
+      const eps = params.token === 'SOL' ? 1e-9 : 1e-6
+      if (params.amount > available + eps) {
+        const have = params.token === 'SOL' ? ctx.solBalance.toFixed(4) : available.toFixed(2)
+        throw new Error(`Insufficient ${params.token} — you have ${have} ${params.token}`)
       }
       return { kind: 'send', params }
     }
@@ -241,8 +284,31 @@ Never ask for private keys or seed phrases.`
     case 'get_balance': {
       return {
         kind: 'balance',
-        params: { solBalance: ctx.solBalance, usdcBalance: ctx.usdcBalance },
+        params: { solBalance: ctx.solBalance, usdcBalance: ctx.usdcBalance, usdtBalance: ctx.usdtBalance },
       }
+    }
+
+    case 'add_contact': {
+      if (!isValidSolanaAddress(args.address)) {
+        throw new Error(`"${args.address}" is not a valid Solana address`)
+      }
+      return { kind: 'add_contact', params: { name: args.name, address: args.address } }
+    }
+
+    case 'get_contacts': {
+      const contacts = await fetchContacts()
+      if (!contacts.length) return 'You have no saved contacts yet. Add contacts in the Contacts tab.'
+      const filter = args.name?.toLowerCase()
+      const list = filter ? contacts.filter(c => c.name.toLowerCase().includes(filter)) : contacts
+      if (!list.length) return `No contact found matching "${args.name}".`
+      const lines = list.map(c => `• **${c.name}** — \`${c.address.slice(0, 8)}...${c.address.slice(-8)}\``)
+      return `Your contacts:\n${lines.join('\n')}`
+    }
+
+    case 'list_schedules': {
+      const jobs = await getScheduledJobs()
+      if (!jobs.length) return 'You have no active recurring payments.'
+      return { kind: 'list_schedules', params: { jobs } }
     }
 
     default:

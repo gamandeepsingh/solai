@@ -22,25 +22,6 @@ Clean UI, playful design, and future-ready AI interactions.
 
 ---
 
-## 🎨 Design
-
-- Minimal + Apple-like UI
-- Soft, playful blob shapes
-- Primary color: `#ABFF7A`
-- Clean typography (Inter / SF Pro)
-- Smooth animations (Framer Motion)
-
----
-
-## 🛠 Tech Stack
-
-- React + TailwindCSS
-- Framer Motion
-- @solana/web3.js
-- Chrome Extension (Manifest v3)
-
----
-
 ## 🔐 Security
 
 - Non-custodial wallet
@@ -54,8 +35,8 @@ Clean UI, playful design, and future-ready AI interactions.
 Turn crypto into **simple commands**:
 
 > "Send $5 to mom every day"  
-> "Swap USDC to SOL"  
-> "Buy when price drops"
+> "Swap USDC to SOL"
+> "Send 1SOL to Joe"
 
 ---
 

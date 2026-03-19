@@ -2,9 +2,12 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, ty
 import { streamChat } from '../lib/openrouter'
 import { runAgentTurn } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
-import { sendSol, sendUsdc } from '../lib/solana'
+import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
 import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
 import { getSync, getSession, setSession } from '../lib/storage'
+import { logTx } from '../lib/history'
+import { createContact } from '../lib/api'
+import type { AgentResult } from '../lib/agent'
 import { useWallet } from './WalletContext'
 import { useBalance } from '../hooks/useBalance'
 import { useToast } from '../components/ui/Toast'
@@ -65,19 +68,20 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
     const sol = balances.find(b => b.meta.symbol === 'SOL')?.amount ?? 0
     const usdc = balances.find(b => b.meta.symbol === 'USDC')?.amount ?? 0
+    const usdt = balances.find(b => b.meta.symbol === 'USDT')?.amount ?? 0
     const ctx = {
       publicKey: account?.publicKey ?? '',
       network,
       solBalance: sol,
       usdcBalance: usdc,
+      usdtBalance: usdt,
     }
 
     // Phase 1: agent intent detection
-    let action: ActionParams | null = null
+    let agentResult: AgentResult = null
     try {
-      action = await runAgentTurn(content, messages.slice(-16), apiKey, 'openai/gpt-4o-mini', ctx)
+      agentResult = await runAgentTurn(content, messages.slice(-16), apiKey, 'openai/gpt-4o-mini', ctx)
     } catch (e: any) {
-      // contact not found or other resolver error — show as assistant text
       const errMsg: ChatMessage = {
         id: crypto.randomUUID(), role: 'assistant',
         content: e?.message ?? 'Something went wrong', timestamp: Date.now(),
@@ -87,11 +91,21 @@ export function AIProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // Phase 2a: action card path
-    if (action) {
+    // Phase 2a: inline text result (e.g. get_contacts)
+    if (typeof agentResult === 'string') {
+      const infoMsg: ChatMessage = {
+        id: crypto.randomUUID(), role: 'assistant', content: agentResult, timestamp: Date.now(),
+      }
+      setMessages(prev => [...prev, infoMsg])
+      setIsStreaming(false)
+      return
+    }
+
+    // Phase 2b: action card path
+    if (agentResult) {
       const actionMsg: ChatMessage = {
         id: crypto.randomUUID(), role: 'assistant', content: '',
-        timestamp: Date.now(), action, actionState: 'pending',
+        timestamp: Date.now(), action: agentResult, actionState: 'pending',
       }
       setMessages(prev => [...prev, actionMsg])
       setIsStreaming(false)
@@ -145,18 +159,21 @@ export function AIProvider({ children }: { children: ReactNode }) {
       if (kind === 'send') {
         const sig = params.token === 'SOL'
           ? await sendSol(keypair, params.recipient, params.amount, network)
-          : await sendUsdc(keypair, params.recipient, params.amount, network)
+          : params.token === 'USDT'
+            ? await sendUsdt(keypair, params.recipient, params.amount, network)
+            : await sendUsdc(keypair, params.recipient, params.amount, network)
         updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
         toast('Sent successfully!', 'success')
+        logTx({ sig, type: 'send', timestamp: Date.now(), amount: params.amount, token: params.token, toOrFrom: params.recipient, status: 'success' })
       }
 
       else if (kind === 'swap') {
-        // Jupiter only works on mainnet
         if (network !== 'mainnet') throw new Error('Swaps require mainnet — go to Settings → Network → Mainnet')
         const freshQuote = await getSwapQuote(params.inputToken, params.outputToken, params.inputAmount, params.slippageBps)
         const sig = await executeSwap(freshQuote, keypair)
         updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
         toast('Swap complete!', 'success')
+        logTx({ sig, type: 'swap', timestamp: Date.now(), amount: params.inputAmount, token: `${params.inputToken}→${params.outputToken}`, status: 'success' })
       }
 
       else if (kind === 'schedule') {
@@ -188,6 +205,12 @@ export function AIProvider({ children }: { children: ReactNode }) {
         updateMsg(setMessages, messageId, { actionState: 'done' })
       }
 
+      else if (kind === 'add_contact') {
+        await createContact({ name: params.name, address: params.address })
+        updateMsg(setMessages, messageId, { actionState: 'done' })
+        toast(`Contact "${params.name}" added!`, 'success')
+      }
+
     } catch (e: any) {
       const raw = e?.message ?? 'Transaction failed'
       const errorMessage = raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation')
@@ -202,7 +225,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
     updateMsg(setMessages, messageId, { actionState: 'cancelled' })
   }, [])
 
-  const clearMessages = useCallback(() => setMessages([]), [])
+  const clearMessages = useCallback(() => {
+    setMessages([])
+    setSession('chatSession', { messages: [], expiresAt: 0 })
+  }, [])
   const abort = useCallback(() => {
     abortRef.current?.abort()
     setIsStreaming(false)

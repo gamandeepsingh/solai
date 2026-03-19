@@ -1,15 +1,18 @@
 import type { EncryptedKeystore, Network } from '../types/wallet'
 import type { Contact } from '../types/contacts'
 import type { ScheduledJob, ConditionalOrder } from '../types/agent'
+import type { TxRecord } from '../types/history'
 
 type LocalData = {
   keystore: EncryptedKeystore
   cachedSolBalance: number
   cachedUsdcBalance: number
+  cachedUsdtBalance: number
   jwtToken: string
   contacts: Contact[]
   scheduledJobs: ScheduledJob[]
   conditionalOrders: ConditionalOrder[]
+  txLog: TxRecord[]
 }
 
 type SyncData = {
