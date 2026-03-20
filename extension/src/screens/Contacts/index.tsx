@@ -69,7 +69,7 @@ export default function ContactsScreen() {
             <AnimatePresence>
               {contacts.map((c, i) => (
                 <motion.div
-                  key={c._id}
+                  key={c.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
@@ -98,7 +98,7 @@ export default function ContactsScreen() {
                     >Copy</motion.button>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
-                      onClick={() => remove(c._id)}
+                      onClick={() => remove(c.id)}
                       className="text-[10px] px-2 py-1 rounded-full border border-red-500/30 text-red-400"
                     >✕</motion.button>
                   </div>

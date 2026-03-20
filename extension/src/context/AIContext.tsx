@@ -1,12 +1,12 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { streamChat } from '../lib/openrouter'
-import { runAgentTurn } from '../lib/agent'
+import { runAgentTurn, SOL_RESERVE } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
 import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
-import { getSync, getLocal, setLocal, getSession, setSession } from '../lib/storage'
+import { getSync, getSession, setSession } from '../lib/storage'
 import { logTx } from '../lib/history'
-import { createContact } from '../lib/api'
+import { saveContact } from '../lib/contacts'
 import type { AgentResult } from '../lib/agent'
 import { useWallet } from './WalletContext'
 import { useBalance } from '../hooks/useBalance'
@@ -75,6 +75,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
       publicKey: account?.publicKey ?? '',
       network,
       solBalance: sol,
+      solMaxSendable: Math.max(0, sol - SOL_RESERVE),
       usdcBalance: usdc,
       usdtBalance: usdt,
       solUsdValue,
@@ -210,18 +211,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
       }
 
       else if (kind === 'add_contact') {
-        const contact = await createContact({ name: params.name, address: params.address })
-        const existing = await getLocal('contacts') ?? []
-        await setLocal('contacts', [...existing, contact])
+        await saveContact({ name: params.name, address: params.address })
         updateMsg(setMessages, messageId, { actionState: 'done' })
         toast(`Contact "${params.name}" added!`, 'success')
       }
 
     } catch (e: any) {
       const raw = e?.message ?? 'Transaction failed'
-      const errorMessage = raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation')
-        ? 'Quote expired — tap Try Again for a fresh rate'
-        : raw
+      const { kind } = msg.action as any
+      const isSwapExpiry = kind === 'swap' && (raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation'))
+      const errorMessage = isSwapExpiry ? 'Quote expired — tap Try Again for a fresh rate' : raw
       updateMsg(setMessages, messageId, { actionState: 'error', errorMessage })
       toast(errorMessage, 'error')
     }
