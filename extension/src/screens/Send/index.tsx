@@ -9,7 +9,6 @@ import { useTransaction } from '../../hooks/useTransaction'
 import { useBalance } from '../../hooks/useBalance'
 import { isValidSolanaAddress } from '../../lib/solana'
 import { logTx } from '../../lib/history'
-import FadeIn from '../../components/animations/FadeIn'
 
 type Token = 'SOL' | 'USDC' | 'USDT'
 type Step = 'address' | 'amount' | 'confirm' | 'done'
@@ -28,7 +27,10 @@ export default function SendScreen() {
   const [txSig, setTxSig] = useState('')
 
   const tokenBalance = balances.find(b => b.meta.symbol === token)?.amount ?? 0
-  const tokenDecimals = token === 'SOL' ? 4 : 2
+  const tokenDecimals = token === 'SOL' ? 6 : 2
+  // 890,880 lamports rent-exempt + ~5,000 lamports fee = ~895,880. Use 0.00095 SOL as reserve.
+  const SOL_RESERVE = 0.00095
+  const maxSendable = token === 'SOL' ? Math.max(0, tokenBalance - SOL_RESERVE) : tokenBalance
 
   function goAddress() {
     if (!isValidSolanaAddress(recipient)) return setError('Invalid Solana address')
@@ -39,7 +41,11 @@ export default function SendScreen() {
   function goConfirm() {
     const amt = parseFloat(amount)
     if (!amt || amt <= 0) return setError('Enter a valid amount')
-    if (amt > tokenBalance) return setError('Insufficient balance')
+    if (amt > maxSendable) return setError(
+      token === 'SOL'
+        ? `Insufficient balance — max sendable is ${maxSendable.toFixed(6)} SOL (fee reserved)`
+        : 'Insufficient balance'
+    )
     setError('')
     setStep('confirm')
   }
@@ -92,7 +98,7 @@ export default function SendScreen() {
               <button onClick={() => setStep('address')} className="text-sm opacity-50 self-start">← Back</button>
               <div>
                 <h2 className="text-xl font-bold mb-1">Amount</h2>
-                <p className="text-xs opacity-40">Available: {tokenBalance.toFixed(tokenDecimals)} {token}</p>
+                <p className="text-xs opacity-40">Available: {maxSendable.toFixed(tokenDecimals)} {token}{token === 'SOL' ? ' (after fee)' : ''}</p>
               </div>
               <Input
                 label={`Amount (${token})`}
@@ -103,7 +109,7 @@ export default function SendScreen() {
                 error={error}
                 onKeyDown={e => e.key === 'Enter' && goConfirm()}
                 rightElement={
-                  <button onClick={() => setAmount(String(tokenBalance))} className="text-[10px] text-primary font-medium">MAX</button>
+                  <button onClick={() => setAmount(String(maxSendable))} className="text-[10px] text-primary font-medium">MAX</button>
                 }
               />
               <Button fullWidth onClick={goConfirm}>Review</Button>

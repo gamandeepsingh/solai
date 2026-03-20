@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchContacts, createContact, updateContact, deleteContact } from '../lib/api'
-import { setLocal } from '../lib/storage'
+import { getContacts, saveContact, editContact, removeContact } from '../lib/contacts'
 import type { Contact } from '../types/contacts'
 
 export function useContacts() {
@@ -9,31 +8,27 @@ export function useContacts() {
 
   const load = useCallback(async () => {
     setIsLoading(true)
-    try {
-      const data = await fetchContacts()
-      setContacts(data)
-      await setLocal('contacts', data)
-    } catch {}
+    setContacts(await getContacts())
     setIsLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  const add = useCallback(async (data: Omit<Contact, '_id' | 'createdAt'>) => {
-    const contact = await createContact(data)
+  const add = useCallback(async (data: Omit<Contact, 'id' | 'createdAt'>) => {
+    const contact = await saveContact(data)
     setContacts(prev => [...prev, contact])
     return contact
   }, [])
 
-  const update = useCallback(async (id: string, data: Partial<Omit<Contact, '_id' | 'createdAt'>>) => {
-    const contact = await updateContact(id, data)
-    setContacts(prev => prev.map(c => c._id === id ? contact : c))
+  const update = useCallback(async (id: string, data: Partial<Omit<Contact, 'id' | 'createdAt'>>) => {
+    const contact = await editContact(id, data)
+    setContacts(prev => prev.map(c => c.id === id ? contact : c))
     return contact
   }, [])
 
   const remove = useCallback(async (id: string) => {
-    await deleteContact(id)
-    setContacts(prev => prev.filter(c => c._id !== id))
+    await removeContact(id)
+    setContacts(prev => prev.filter(c => c.id !== id))
   }, [])
 
   return { contacts, isLoading, add, update, remove, reload: load }

@@ -1,7 +1,6 @@
 import bs58 from 'bs58'
 import nacl from 'tweetnacl'
 import { getLocal, setLocal } from './storage'
-import type { Contact } from '../types/contacts'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
@@ -44,36 +43,4 @@ export async function authenticate(keypair: nacl.SignKeyPair): Promise<void> {
   await setLocal('jwtToken', token)
 }
 
-export async function fetchContacts(): Promise<Contact[]> {
-  try {
-    const res = await fetchWithAuth('/contacts')
-    if (!res.ok) throw new Error('Failed to fetch contacts')
-    return res.json()
-  } catch {
-    const cached = await getLocal('contacts')
-    return cached ?? []
-  }
-}
 
-export async function createContact(data: Omit<Contact, '_id' | 'createdAt'>): Promise<Contact> {
-  const res = await fetchWithAuth('/contacts', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to create contact')
-  return res.json()
-}
-
-export async function updateContact(id: string, data: Partial<Omit<Contact, '_id' | 'createdAt'>>): Promise<Contact> {
-  const res = await fetchWithAuth(`/contacts/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  })
-  if (!res.ok) throw new Error('Failed to update contact')
-  return res.json()
-}
-
-export async function deleteContact(id: string): Promise<void> {
-  const res = await fetchWithAuth(`/contacts/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Failed to delete contact')
-}

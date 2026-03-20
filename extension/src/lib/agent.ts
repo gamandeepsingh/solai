@@ -1,6 +1,5 @@
 import { callWithTools } from './openrouter'
-import { getLocal } from './storage'
-import { fetchContacts } from './api'
+import { getContacts } from './contacts'
 import { isValidSolanaAddress } from './solana'
 import { convertUsdToToken } from './prices'
 import { getSwapQuote, parseQuoteForDisplay } from './jupiter'
@@ -11,10 +10,14 @@ import type { Network } from '../types/wallet'
 
 export type AgentResult = ActionParams | string | null
 
+// 890,880 lamports rent-exempt + ~5,000 lamports fee = ~895,880. Use 0.00095 SOL as reserve.
+export const SOL_RESERVE = 0.00095
+
 export interface AgentContext {
   publicKey: string
   network: Network
   solBalance: number
+  solMaxSendable: number  // solBalance - SOL_RESERVE (pre-computed, use this for send amounts)
   usdcBalance: number
   usdtBalance: number
   solUsdValue: number
@@ -40,8 +43,7 @@ async function resolveRecipient(raw: string): Promise<{ address: string; label: 
   if (isValidSolanaAddress(raw)) {
     return { address: raw, label: `${raw.slice(0, 4)}…${raw.slice(-4)}` }
   }
-  const cached = await getLocal('contacts')
-  const contacts = cached?.length ? cached : await fetchContacts()
+  const contacts = await getContacts()
   const match = contacts.find(c => c.name.toLowerCase() === raw.toLowerCase())
   if (!match) throw new Error(`Contact "${raw}" not found — add them in Contacts first`)
   return { address: match.address, label: match.name }
@@ -192,11 +194,12 @@ export async function runAgentTurn(
   const systemPrompt = `You are SOLAI, an agentic Solana wallet assistant.
 Wallet address: ${ctx.publicKey}
 Network: ${ctx.network}
-SOL balance: ${ctx.solBalance.toFixed(4)} SOL (~$${ctx.solUsdValue.toFixed(2)})
-USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC (~$${ctx.usdcBalance.toFixed(2)})
-USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT (~$${ctx.usdtBalance.toFixed(2)})
+SOL balance: ${ctx.solBalance.toFixed(6)} SOL (~$${ctx.solUsdValue.toFixed(2)}) — max sendable: ${ctx.solMaxSendable.toFixed(6)} SOL (fee + rent reserved)
+USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC
+USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT
 Total portfolio: ~$${ctx.totalUsdValue.toFixed(2)} USD
 
+IMPORTANT: When sending SOL, NEVER exceed ${ctx.solMaxSendable.toFixed(6)} SOL. If the user says "send all" or "max", use exactly ${ctx.solMaxSendable.toFixed(6)} SOL.
 For actionable requests (send, swap, schedule, balance check, conditional orders) — call the appropriate tool.
 For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — reply in plain text.
 For anything unrelated to crypto or wallets (math, essays, general knowledge, etc.) — politely decline and remind the user you are a wallet assistant.
@@ -220,11 +223,12 @@ Never ask for private keys or seed phrases.`
   switch (call.function.name) {
     case 'send_token': {
       const params = await resolveSendParams(args)
-      const available = params.token === 'SOL' ? ctx.solBalance : params.token === 'USDC' ? ctx.usdcBalance : ctx.usdtBalance
-      const eps = params.token === 'SOL' ? 1e-9 : 1e-6
+      const rawBalance = params.token === 'SOL' ? ctx.solBalance : params.token === 'USDC' ? ctx.usdcBalance : ctx.usdtBalance
+      const available = params.token === 'SOL' ? Math.max(0, rawBalance - SOL_RESERVE) : rawBalance
+      const eps = 1e-6
       if (params.amount > available + eps) {
-        const have = params.token === 'SOL' ? ctx.solBalance.toFixed(4) : available.toFixed(2)
-        throw new Error(`Insufficient ${params.token} — you have ${have} ${params.token}`)
+        const have = params.token === 'SOL' ? available.toFixed(6) : available.toFixed(2)
+        throw new Error(`Insufficient ${params.token} — max sendable is ${have} ${params.token}${params.token === 'SOL' ? ' (0.001 SOL reserved for fee + rent)' : ''}`)
       }
       return { kind: 'send', params }
     }
@@ -305,7 +309,7 @@ Never ask for private keys or seed phrases.`
     }
 
     case 'get_contacts': {
-      const contacts = await fetchContacts()
+      const contacts = await getContacts()
       if (!contacts.length) return 'You have no saved contacts yet. Add contacts in the Contacts tab.'
       const filter = args.name?.toLowerCase()
       const list = filter ? contacts.filter(c => c.name.toLowerCase().includes(filter)) : contacts
