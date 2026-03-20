@@ -12,7 +12,7 @@ import { getMnemonicFromKeystore } from '../../lib/wallet'
 import FadeIn from '../../components/animations/FadeIn'
 import type { Network } from '../../types/wallet'
 
-const NETWORKS: Network[] = ['mainnet', 'devnet', 'testnet']
+const NETWORKS: Network[] = ['mainnet', 'devnet']
 
 export default function SettingsScreen() {
   const { account, network, setNetwork, lock } = useWallet()
@@ -61,9 +61,11 @@ export default function SettingsScreen() {
               value={apiKey}
               onChange={e => setApiKey(e.target.value)}
             />
-            <Button size="sm" onClick={saveApiKey} isLoading={isSavingKey} className="mt-2">
-              {savedKey ? 'Update Key' : 'Save Key'}
-            </Button>
+            {apiKey !== savedKey && (
+              <Button size="sm" onClick={saveApiKey} isLoading={isSavingKey} className="mt-2">
+                {savedKey ? 'Update Key' : 'Save Key'}
+              </Button>
+            )}
           </Section>
 
           <Section title="Appearance">

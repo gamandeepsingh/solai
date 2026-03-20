@@ -1,4 +1,4 @@
-export type Network = 'mainnet' | 'devnet' | 'testnet'
+export type Network = 'mainnet' | 'devnet'
 
 export interface EncryptedKeystore {
   version: 1
@@ -6,6 +6,12 @@ export interface EncryptedKeystore {
   iv: string
   ciphertext: string
   publicKey: string
+}
+
+export interface WalletEntry {
+  id: string
+  name: string
+  keystore: EncryptedKeystore
 }
 
 export interface WalletAccount {

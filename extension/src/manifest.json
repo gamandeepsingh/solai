@@ -21,12 +21,15 @@
   "background": {
     "service_worker": "src/background/service-worker.ts"
   },
-  "permissions": ["storage", "alarms", "clipboardWrite"],
+  "permissions": ["storage", "alarms", "clipboardWrite", "notifications"],
   "host_permissions": [
     "https://api.mainnet-beta.solana.com/*",
     "https://api.devnet.solana.com/*",
-    "https://api.testnet.solana.com/*",
     "https://openrouter.ai/*",
-    "http://localhost:4000/*"
+    "http://localhost:4000/*",
+    "https://quote-api.jup.ag/*",
+    "https://api.jup.ag/*",
+    "https://api.coingecko.com/*",
+    "https://mainnet.helius-rpc.com/*"
   ]
 }

@@ -2,12 +2,11 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, se
 import { getAssociatedTokenAddress, createTransferInstruction, getAccount, createAssociatedTokenAccountInstruction } from '@solana/spl-token'
 import nacl from 'tweetnacl'
 import type { Network } from '../types/wallet'
-import { USDC_MINT } from './tokens'
+import { USDC_MINT, USDT_MINT } from './tokens'
 
 const ENDPOINTS: Record<Network, string> = {
-  mainnet: 'https://api.mainnet-beta.solana.com',
-  devnet: 'https://api.devnet.solana.com',
-  testnet: 'https://api.testnet.solana.com',
+  mainnet: import.meta.env.VITE_RPC_MAINNET || 'https://api.mainnet-beta.solana.com',
+  devnet:  import.meta.env.VITE_RPC_DEVNET  || 'https://api.devnet.solana.com',
 }
 
 let _connection: Connection | null = null
@@ -27,9 +26,9 @@ export async function getSolBalance(publicKey: string, network: Network): Promis
   return balance / LAMPORTS_PER_SOL
 }
 
-export async function getUsdcBalance(publicKey: string, network: Network): Promise<number> {
+async function getSplBalance(publicKey: string, network: Network, mintAddress: string): Promise<number> {
   const conn = getConnection(network)
-  const mintKey = new PublicKey(USDC_MINT[network])
+  const mintKey = new PublicKey(mintAddress)
   const ownerKey = new PublicKey(publicKey)
   try {
     const ata = await getAssociatedTokenAddress(mintKey, ownerKey)
@@ -38,6 +37,14 @@ export async function getUsdcBalance(publicKey: string, network: Network): Promi
   } catch {
     return 0
   }
+}
+
+export async function getUsdcBalance(publicKey: string, network: Network): Promise<number> {
+  return getSplBalance(publicKey, network, USDC_MINT[network])
+}
+
+export async function getUsdtBalance(publicKey: string, network: Network): Promise<number> {
+  return getSplBalance(publicKey, network, USDT_MINT[network])
 }
 
 function naclKeypairToSolana(keypair: nacl.SignKeyPair): Keypair {
@@ -62,29 +69,36 @@ export async function sendSol(
   return sendAndConfirmTransaction(conn, tx, [solanaKeypair])
 }
 
-export async function sendUsdc(
+async function sendSplToken(
   keypair: nacl.SignKeyPair,
   recipient: string,
   amount: number,
+  mintAddress: string,
   network: Network
 ): Promise<string> {
   const conn = getConnection(network)
   const solanaKeypair = naclKeypairToSolana(keypair)
-  const mintKey = new PublicKey(USDC_MINT[network])
+  const mintKey = new PublicKey(mintAddress)
   const fromAta = await getAssociatedTokenAddress(mintKey, solanaKeypair.publicKey)
   const toKey = new PublicKey(recipient)
   const toAta = await getAssociatedTokenAddress(mintKey, toKey)
 
   const tx = new Transaction()
-
   try {
     await getAccount(conn, toAta)
   } catch {
     tx.add(createAssociatedTokenAccountInstruction(solanaKeypair.publicKey, toAta, toKey, mintKey))
   }
-
   tx.add(createTransferInstruction(fromAta, toAta, solanaKeypair.publicKey, BigInt(Math.round(amount * 1_000_000))))
   return sendAndConfirmTransaction(conn, tx, [solanaKeypair])
+}
+
+export async function sendUsdc(keypair: nacl.SignKeyPair, recipient: string, amount: number, network: Network): Promise<string> {
+  return sendSplToken(keypair, recipient, amount, USDC_MINT[network], network)
+}
+
+export async function sendUsdt(keypair: nacl.SignKeyPair, recipient: string, amount: number, network: Network): Promise<string> {
+  return sendSplToken(keypair, recipient, amount, USDT_MINT[network], network)
 }
 
 export async function estimateFee(network: Network): Promise<number> {

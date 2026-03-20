@@ -3,8 +3,12 @@ import type { TokenMeta } from '../types/tokens'
 
 export const USDC_MINT: Record<Network, string> = {
   mainnet: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  devnet: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-  testnet: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  devnet:  '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+}
+
+export const USDT_MINT: Record<Network, string> = {
+  mainnet: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  devnet:  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
 }
 
 export const SOL_META: TokenMeta = {
@@ -25,4 +29,13 @@ export const USDC_META: TokenMeta = {
   coingeckoId: 'usd-coin',
 }
 
-export const SUPPORTED_TOKENS: TokenMeta[] = [SOL_META, USDC_META]
+export const USDT_META: TokenMeta = {
+  symbol: 'USDT',
+  name: 'Tether USD',
+  decimals: 6,
+  mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  logoUri: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg',
+  coingeckoId: 'tether',
+}
+
+export const SUPPORTED_TOKENS: TokenMeta[] = [SOL_META, USDC_META, USDT_META]

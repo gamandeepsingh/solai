@@ -24,9 +24,9 @@ export default function Welcome() {
           <motion.div
             animate={{ rotate: [0, 5, -5, 0] }}
             transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-20 h-20 rounded-3xl bg-primary flex items-center justify-center shadow-[0_0_40px_rgba(171,255,122,0.4)]"
+            className="w-20 h-20 rounded-3xl bg-black flex items-center justify-center shadow-[0_0_40px_rgba(171,255,122,0.4)]"
           >
-            <span className="text-3xl">◎</span>
+            <img src="/icons/icon128.png" alt="SOLAI" className="w-14 h-14 object-contain" />
           </motion.div>
           <h1 className="text-3xl font-bold tracking-tight">SOLAI</h1>
           <p className="text-sm opacity-50 max-w-[200px]">Your friendly Solana wallet, powered by AI</p>

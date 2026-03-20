@@ -33,7 +33,7 @@ export default function ActionButtons() {
           <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
         </svg>
       } />
-      <ActionBtn label="Swap" onClick={() => {}} icon={
+      <ActionBtn label="Swap" onClick={() => navigate('/swap')} icon={
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="17 1 21 5 17 9" />
           <path d="M3 11V9a4 4 0 0 1 4-4h14" />

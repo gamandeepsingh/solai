@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { sendSol, sendUsdc } from '../lib/solana'
+import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
 import { useWallet } from '../context/WalletContext'
 
 export function useTransaction() {
@@ -8,7 +8,7 @@ export function useTransaction() {
   const [error, setError] = useState<string | null>(null)
   const [txSignature, setTxSignature] = useState<string | null>(null)
 
-  async function send(recipient: string, amount: number, token: 'SOL' | 'USDC') {
+  async function send(recipient: string, amount: number, token: 'SOL' | 'USDC' | 'USDT') {
     if (!keypair) throw new Error('Wallet is locked')
     setIsLoading(true)
     setError(null)
@@ -16,7 +16,9 @@ export function useTransaction() {
     try {
       const sig = token === 'SOL'
         ? await sendSol(keypair, recipient, amount, network)
-        : await sendUsdc(keypair, recipient, amount, network)
+        : token === 'USDT'
+          ? await sendUsdt(keypair, recipient, amount, network)
+          : await sendUsdc(keypair, recipient, amount, network)
       setTxSignature(sig)
       return sig
     } catch (e: any) {

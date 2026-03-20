@@ -8,11 +8,13 @@ import Input from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
 import Spinner from '../../components/ui/Spinner'
 import { useContacts } from '../../hooks/useContacts'
+import { useToast } from '../../components/ui/Toast'
 import { isValidSolanaAddress } from '../../lib/solana'
 
 export default function ContactsScreen() {
   const navigate = useNavigate()
   const { contacts, isLoading, add, remove } = useContacts()
+  const { toast } = useToast()
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
@@ -51,8 +53,15 @@ export default function ContactsScreen() {
         {isLoading ? (
           <div className="flex justify-center mt-10"><Spinner /></div>
         ) : contacts.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 mt-10 opacity-40">
-            <span className="text-4xl">👥</span>
+          <div className="flex flex-col items-center gap-3 mt-10 text-[var(--color-text)]/50">
+            <div className="w-10 h-10 rounded-2xl bg-[var(--color-card)] flex items-center justify-center border border-[var(--color-border)]">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </div>
             <p className="text-sm">No contacts yet</p>
           </div>
         ) : (
@@ -82,6 +91,11 @@ export default function ContactsScreen() {
                       onClick={() => navigate('/send', { state: { recipient: c.address } })}
                       className="text-[10px] px-2 py-1 rounded-full border border-primary/30 text-primary"
                     >Send</motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => { navigator.clipboard.writeText(c.address); toast('Address copied!', 'success') }}
+                      className="text-[10px] px-2 py-1 rounded-full border border-[var(--color-border)] opacity-60"
+                    >Copy</motion.button>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => remove(c._id)}
