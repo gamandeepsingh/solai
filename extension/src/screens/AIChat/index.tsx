@@ -247,7 +247,7 @@ export default function AIChatScreen() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={hasKey ? AI_PLACEHOLDERS[phIdx] : 'Set up API key in Settings first'}
+            placeholder={hasKey ? `Ask "${AI_PLACEHOLDERS[phIdx]}"` : 'Set up API key in Settings first'}
             disabled={!hasKey || isStreaming}
             className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors disabled:opacity-40"
           />

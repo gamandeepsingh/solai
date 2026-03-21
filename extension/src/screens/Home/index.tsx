@@ -55,7 +55,7 @@ export default function HomeScreen() {
               <input
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
-                placeholder={AI_PLACEHOLDERS[phIdx]}
+                placeholder={`Ask "${AI_PLACEHOLDERS[phIdx]}"`}
                 className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors shadow-lg"
               />
               <button
