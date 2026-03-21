@@ -1,6 +1,7 @@
 # SOLAI Wallet 🟢
 
 Minimal, AI-first Solana wallet built as a Chrome Extension.
+<img width="1280" height="800" alt="1" src="https://github.com/user-attachments/assets/ff16e8e7-c422-4852-8b4b-40467f74e633" />
 
 ---
 
