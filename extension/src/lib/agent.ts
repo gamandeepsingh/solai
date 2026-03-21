@@ -1,7 +1,7 @@
 import { callWithTools } from './openrouter'
 import { getContacts } from './contacts'
 import { isValidSolanaAddress } from './solana'
-import { convertUsdToToken } from './prices'
+import { convertUsdToToken, getTokenPrice } from './prices'
 import { getSwapQuote, parseQuoteForDisplay } from './jupiter'
 import { getScheduledJobs } from './scheduler'
 import type { ChatMessage } from '../types/ai'
@@ -122,19 +122,17 @@ export const AGENT_TOOLS = [
   {
     type: 'function',
     function: {
-      name: 'conditional_order',
-      description: 'Create a conditional order triggered by price. Use for "buy SOL if price drops X%", "alert when price reaches $Y".',
+      name: 'create_conditional_order',
+      description: 'Create a conditional buy order that auto-executes when price drops or rises by a percent. Use for "buy SOL if price drops 10%", "buy 50 USDC of SOL if SOL drops 15%".',
       parameters: {
         type: 'object',
         properties: {
-          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
-          condition: { type: 'string', enum: ['below', 'above'] },
-          targetPriceUsd: { type: 'number', description: 'Target price in USD that triggers the action' },
-          actionKind: { type: 'string', enum: ['swap', 'send'] },
-          actionAmount: { type: 'number' },
-          actionToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
+          buyToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'], description: 'Token to receive' },
+          spendToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'], description: 'Token to spend' },
+          spendAmount: { type: 'number', description: 'Amount of spendToken to use' },
+          percentChange: { type: 'number', description: 'Percent change to trigger. Negative = drop (e.g. -10 for 10% drop), positive = rise.' },
         },
-        required: ['token', 'condition', 'targetPriceUsd', 'actionKind', 'actionAmount', 'actionToken'],
+        required: ['buyToken', 'spendToken', 'spendAmount', 'percentChange'],
       },
     },
   },
@@ -205,7 +203,9 @@ For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — rep
 For anything unrelated to crypto or wallets (math, essays, general knowledge, etc.) — politely decline and remind the user you are a wallet assistant.
 When user says "$X" or "X dollars", set amountIsUsd=true.
 When user names a contact (e.g. "mom", "Alice"), pass the name as-is to recipient.
-Never ask for private keys or seed phrases.`
+Never ask for private keys or seed phrases.
+Conditional orders: only SOL, USDC, USDT are supported (Solana wallet). If asked to buy ETH, BTC, or other non-Solana tokens, explain only SOL/USDC/USDT are available.
+For "buy X if price drops Y%", use create_conditional_order. percentChange is negative for drops (e.g. -10 for 10% drop), positive for rises.`
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -268,22 +268,23 @@ Never ask for private keys or seed phrases.`
       }
     }
 
-    case 'conditional_order': {
-      const token = args.token as AgentToken
-      const actionToken = args.actionToken as AgentToken
-      const actionLabel = args.actionKind === 'swap'
-        ? `Swap ${args.actionAmount} ${actionToken}`
-        : `Send ${args.actionAmount} ${actionToken}`
+    case 'create_conditional_order': {
+      const buyToken = args.buyToken as AgentToken
+      const spendToken = args.spendToken as AgentToken
+      const coingeckoId = buyToken === 'SOL' ? 'solana' : buyToken === 'USDC' ? 'usd-coin' : 'tether'
+      const basePrice = await getTokenPrice(coingeckoId)
+      const triggerPrice = basePrice * (1 + args.percentChange / 100)
+      const direction: 'below' | 'above' = args.percentChange < 0 ? 'below' : 'above'
       return {
-        kind: 'conditional',
+        kind: 'conditional_order',
         params: {
-          token,
-          condition: args.condition,
-          targetPriceUsd: args.targetPriceUsd,
-          action: args.actionKind === 'swap'
-            ? { inputToken: actionToken, outputToken: actionToken === 'SOL' ? 'USDC' : 'SOL', inputAmount: args.actionAmount, slippageBps: 50 }
-            : { recipient: ctx.publicKey, recipientLabel: 'self', amount: args.actionAmount, token: actionToken },
-          actionLabel,
+          buyToken,
+          spendToken,
+          spendAmount: args.spendAmount,
+          triggerPrice,
+          basePrice,
+          percentChange: args.percentChange,
+          direction,
         },
       }
     }

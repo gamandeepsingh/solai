@@ -3,8 +3,7 @@ import nacl from 'tweetnacl'
 import bs58 from 'bs58'
 import type { WalletAccount, WalletEntry, Network } from '../types/wallet'
 import { getLocal, setLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
-import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair } from '../lib/wallet'
-import { authenticate } from '../lib/api'
+import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair, getMnemonicFromKeystore, validateMnemonic } from '../lib/wallet'
 
 const SESSION_TTL = 30 * 60 * 1000
 
@@ -31,6 +30,8 @@ interface WalletContextValue {
   removeWallet: (id: string) => Promise<void>
   unlock: (password: string) => Promise<void>
   lock: () => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
+  changePasswordFromMnemonic: (mnemonic: string, newPassword: string) => Promise<void>
   setNetwork: (n: Network) => void
   init: () => Promise<{ hasWallet: boolean }>
 }
@@ -133,7 +134,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setActiveId(entry.id)
     setKeypair(kp)
     setIsLocked(false)
-    try { await authenticate(kp) } catch {}
     return mnemonic
   }, [])
 
@@ -149,7 +149,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setActiveId(entry.id)
     setKeypair(kp)
     setIsLocked(false)
-    try { await authenticate(kp) } catch {}
   }, [])
 
   const addWallet = useCallback(async (params: AddWalletParams): Promise<string> => {
@@ -169,7 +168,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     keypairsMapRef.current = { ...keypairsMapRef.current, [entry.id]: kp }
     await saveSession(keypairsMapRef.current)
     setAccounts(updated)
-    try { await authenticate(kp) } catch {}
     return mnemonic
   }, [])
 
@@ -179,8 +177,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const kp = keypairsMapRef.current[id]
     if (kp) {
       setKeypair(kp)
-      try { await authenticate(kp) } catch {}
-    }
+      }
   }, [])
 
   const renameWallet = useCallback(async (id: string, name: string) => {
@@ -228,8 +225,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const activeKp = map[savedActiveId]
     setKeypair(activeKp ?? null)
     setIsLocked(false)
-    try { await authenticate(activeKp) } catch {}
   }, [])
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
+    const wallets = await getLocal('wallets') ?? []
+    if (!wallets.length) throw new Error('No wallet found')
+    const updatedWallets = await Promise.all(
+      wallets.map(async w => {
+        const mnemonic = await getMnemonicFromKeystore(w.keystore, currentPassword)
+        return { ...w, keystore: await createKeystore(mnemonic, newPassword) }
+      })
+    )
+    await setLocal('wallets', updatedWallets)
+    setAccounts(updatedWallets)
+    await saveSession(keypairsMapRef.current)
+  }, [])
+
+  const changePasswordFromMnemonic = useCallback(async (mnemonic: string, newPassword: string): Promise<void> => {
+    const wallets = await getLocal('wallets') ?? []
+    if (!validateMnemonic(mnemonic)) throw new Error('Invalid recovery phrase — check all 12 words')
+    const kp = await mnemonicToKeypair(mnemonic)
+    const pub = bs58.encode(kp.publicKey)
+    const match = wallets.find(w => w.keystore.publicKey === pub)
+    if (!match) throw new Error('Mnemonic does not match any wallet in this account')
+    const newKeystore = await createKeystore(mnemonic, newPassword)
+    const updated = wallets.map(w => w.id === match.id ? { ...w, keystore: newKeystore } : w)
+    await setLocal('wallets', updated)
+    await unlock(newPassword)
+  }, [unlock])
 
   const lock = useCallback(async () => {
     keypairsMapRef.current = {}
@@ -247,7 +270,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <WalletContext.Provider value={{
       accounts, account, activeId, keypair, network, isLocked, isLoading,
       createWallet, importWallet, addWallet, switchWallet, renameWallet, removeWallet,
-      unlock, lock, setNetwork, init,
+      unlock, lock, changePassword, changePasswordFromMnemonic, setNetwork, init,
     }}>
       {children}
     </WalletContext.Provider>

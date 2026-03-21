@@ -27,12 +27,14 @@ export interface ScheduleParams {
   nextRun: number
 }
 
-export interface ConditionalParams {
-  token: AgentToken
-  condition: 'below' | 'above'
-  targetPriceUsd: number
-  action: SwapParams | SendParams
-  actionLabel: string
+export interface ConditionalOrderParams {
+  buyToken: AgentToken
+  spendToken: AgentToken
+  spendAmount: number
+  triggerPrice: number
+  basePrice: number
+  percentChange: number
+  direction: 'below' | 'above'
 }
 
 export interface AddContactParams {
@@ -44,7 +46,7 @@ export type ActionParams =
   | { kind: 'send'; params: SendParams }
   | { kind: 'swap'; params: SwapParams }
   | { kind: 'schedule'; params: ScheduleParams }
-  | { kind: 'conditional'; params: ConditionalParams }
+  | { kind: 'conditional_order'; params: ConditionalOrderParams }
   | { kind: 'balance'; params: { solBalance: number; usdcBalance: number; usdtBalance: number; solUsdValue: number; totalUsdValue: number } }
   | { kind: 'add_contact'; params: AddContactParams }
   | { kind: 'list_schedules'; params: { jobs: ScheduledJob[] } }
@@ -58,12 +60,4 @@ export interface ScheduledJob {
   createdAt: number
 }
 
-export interface ConditionalOrder {
-  id: string
-  token: AgentToken
-  condition: 'below' | 'above'
-  targetPriceUsd: number
-  action: SwapParams | SendParams
-  actionLabel: string
-  createdAt: number
-}
+

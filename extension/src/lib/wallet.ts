@@ -37,13 +37,17 @@ export async function createKeystore(mnemonic: string, password: string): Promis
   }
 }
 
-export async function unlockKeystore(keystore: EncryptedKeystore, password: string): Promise<nacl.SignKeyPair> {
-  const mnemonic = await decrypt(keystore.salt, keystore.iv, keystore.ciphertext, password)
-  return mnemonicToKeypair(mnemonic)
+export async function getMnemonicFromKeystore(keystore: EncryptedKeystore, password: string): Promise<string> {
+  try {
+    return await decrypt(keystore.salt, keystore.iv, keystore.ciphertext, password)
+  } catch {
+    throw new Error('Incorrect password')
+  }
 }
 
-export async function getMnemonicFromKeystore(keystore: EncryptedKeystore, password: string): Promise<string> {
-  return decrypt(keystore.salt, keystore.iv, keystore.ciphertext, password)
+export async function unlockKeystore(keystore: EncryptedKeystore, password: string): Promise<nacl.SignKeyPair> {
+  const mnemonic = await getMnemonicFromKeystore(keystore, password)
+  return mnemonicToKeypair(mnemonic)
 }
 
 export function signMessage(message: Uint8Array, secretKey: Uint8Array): Uint8Array {

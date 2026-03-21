@@ -16,22 +16,20 @@ const NAV_ITEMS = [
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   )},
-  { path: '/history', label: 'History', icon: (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  )},
   { path: '/ai', label: 'AI', icon: (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   )},
-  { path: '/settings', label: 'Settings', icon: (
+  { path: '/orders', label: 'Orders', icon: (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" />
-      <circle cx="8" cy="6" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
-      <circle cx="16" cy="12" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
-      <circle cx="8" cy="18" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
+  )},
+  { path: '/history', label: 'History', icon: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   )},
 ]

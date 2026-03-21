@@ -4,6 +4,7 @@ import { useWallet } from '../../context/WalletContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useToast } from '../ui/Toast'
 import WalletSwitcher from '../wallet/WalletSwitcher'
+import { useNavigate } from 'react-router-dom'
 
 function truncate(s: string) {
   return s ? `${s.slice(0, 4)}...${s.slice(-4)}` : ''
@@ -26,6 +27,7 @@ export default function Header() {
   const { theme, toggle } = useTheme()
   const { toast } = useToast()
   const [showSwitcher, setShowSwitcher] = useState(false)
+  const navigate = useNavigate();
 
   function copyAddress() {
     if (!account) return
@@ -92,6 +94,19 @@ export default function Header() {
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
               </svg>
             )}
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("/settings")}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+            title="Settings"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" />
+              <circle cx="8" cy="6" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+              <circle cx="16" cy="12" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+              <circle cx="8" cy="18" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+            </svg>
           </motion.button>
         </div>
       </div>

@@ -63,7 +63,7 @@ export default function HistoryScreen() {
           <div className="flex justify-center mt-10"><Spinner /></div>
         ) : records.length === 0 ? (
           <div className="flex flex-col items-center gap-3 mt-10 opacity-40">
-            <span className="text-4xl">📋</span>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="12" y2="15"/></svg>
             <p className="text-sm">No transactions yet</p>
           </div>
         ) : (

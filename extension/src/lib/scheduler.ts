@@ -1,5 +1,5 @@
 import { getLocal, setLocal } from './storage'
-import type { ScheduledJob, ConditionalOrder } from '../types/agent'
+import type { ScheduledJob } from '../types/agent'
 
 export async function getScheduledJobs(): Promise<ScheduledJob[]> {
   return (await getLocal('scheduledJobs')) ?? []
@@ -20,22 +20,6 @@ export async function removeScheduledJob(id: string): Promise<void> {
 export async function updateJobNextRun(id: string, nextRun: number): Promise<void> {
   const jobs = await getScheduledJobs()
   await setLocal('scheduledJobs', jobs.map(j => j.id === id ? { ...j, nextRun } : j))
-}
-
-export async function getConditionalOrders(): Promise<ConditionalOrder[]> {
-  return (await getLocal('conditionalOrders')) ?? []
-}
-
-export async function addConditionalOrder(order: Omit<ConditionalOrder, 'id' | 'createdAt'>): Promise<ConditionalOrder> {
-  const full: ConditionalOrder = { ...order, id: crypto.randomUUID(), createdAt: Date.now() }
-  const orders = await getConditionalOrders()
-  await setLocal('conditionalOrders', [...orders, full])
-  return full
-}
-
-export async function removeConditionalOrder(id: string): Promise<void> {
-  const orders = await getConditionalOrders()
-  await setLocal('conditionalOrders', orders.filter(o => o.id !== id))
 }
 
 export function ensureSchedulerAlarm(): void {

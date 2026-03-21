@@ -11,7 +11,7 @@ export default {
         'bg-dark': '#000000',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Outfit', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         float: {

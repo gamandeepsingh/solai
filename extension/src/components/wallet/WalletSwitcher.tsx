@@ -281,7 +281,12 @@ export default function WalletSwitcher({ onClose }: Props) {
               ))}
             </div>
             <button onClick={copyMnemonic} className="w-full py-2.5 rounded-2xl border border-[var(--color-border)] text-sm font-medium transition-colors hover:border-primary/40">
-              {copiedMnemonic ? '✓ Copied!' : 'Copy to clipboard'}
+              {copiedMnemonic ? (
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Copied!
+                </span>
+              ) : 'Copy to clipboard'}
             </button>
             <button onClick={onClose} className="w-full py-3 rounded-2xl bg-primary text-black text-sm font-semibold">
               I saved it — Done

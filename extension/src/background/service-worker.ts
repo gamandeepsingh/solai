@@ -4,8 +4,10 @@
 
 import nacl from 'tweetnacl'
 import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
+import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import type { ScheduledJob } from '../types/agent'
+import type { ConditionalOrder } from '../types/orders'
 import type { Network } from '../types/wallet'
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -111,29 +113,66 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   if (alarm.name === 'price-check') {
     const { conditionalOrders = [] } = await chrome.storage.local.get('conditionalOrders') as any
-    if (!conditionalOrders.length) return
+    const pending: ConditionalOrder[] = conditionalOrders.filter((o: ConditionalOrder) => o.status === 'pending')
+    if (!pending.length) return
 
     try {
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd')
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana,usd-coin,tether&vs_currencies=usd')
       const data = await res.json()
-      const solPrice: number = data.solana?.usd ?? 0
-      if (!solPrice) return
+      const prices: Record<string, number> = {
+        SOL: data.solana?.usd ?? 0,
+        USDC: data['usd-coin']?.usd ?? 1,
+        USDT: data.tether?.usd ?? 1,
+      }
 
-      for (const order of conditionalOrders) {
-        const price = order.token === 'SOL' ? solPrice : 1
-        const triggered =
-          (order.condition === 'below' && price < order.targetPriceUsd) ||
-          (order.condition === 'above' && price > order.targetPriceUsd)
+      const keypair = await getSessionKeypair()
+      const updatedOrders = [...conditionalOrders]
 
-        if (triggered) {
-          chrome.notifications.create(`conditional-${order.id}`, {
+      for (const order of pending) {
+        const price = prices[order.buyToken] ?? 0
+        if (!price) continue
+
+        const triggered = order.direction === 'below'
+          ? price <= order.triggerPrice
+          : price >= order.triggerPrice
+
+        if (!triggered) continue
+
+        const idx = updatedOrders.findIndex((o: ConditionalOrder) => o.id === order.id)
+
+        if (!keypair) {
+          chrome.notifications.create(`order-locked-${order.id}`, {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icons/icon128.png'),
-            title: `Price Alert: ${order.token} ${order.condition} $${order.targetPriceUsd}`,
-            message: `Current: $${price.toFixed(2)}. Open SOLAI to execute: ${order.actionLabel}`,
+            title: 'Order Triggered — Wallet Locked',
+            message: `Buy ${order.buyToken} order triggered at $${price.toFixed(2)}. Open SOLAI to execute.`,
+          })
+          continue
+        }
+
+        try {
+          const quote = await getSwapQuote(order.spendToken, order.buyToken, order.spendAmount, 50)
+          const sig = await executeSwap(quote, keypair)
+          await logTx({ sig, type: 'swap', timestamp: Date.now(), amount: order.spendAmount, token: `${order.spendToken}→${order.buyToken}`, status: 'success' })
+          if (idx !== -1) updatedOrders[idx] = { ...order, status: 'executed', executedAt: new Date().toISOString(), txSignature: sig }
+          chrome.notifications.create(`order-done-${order.id}`, {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+            title: 'Order Executed',
+            message: `Bought ${order.buyToken} with ${order.spendAmount} ${order.spendToken} at $${price.toFixed(2)}`,
+          })
+        } catch (e: any) {
+          if (idx !== -1) updatedOrders[idx] = { ...order, status: 'failed', errorMessage: e?.message ?? 'Unknown error' }
+          chrome.notifications.create(`order-failed-${order.id}`, {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+            title: 'Order Failed',
+            message: `Could not buy ${order.buyToken}: ${(e?.message ?? 'Unknown error').slice(0, 80)}`,
           })
         }
       }
+
+      await chrome.storage.local.set({ conditionalOrders: updatedOrders })
     } catch {}
   }
 })

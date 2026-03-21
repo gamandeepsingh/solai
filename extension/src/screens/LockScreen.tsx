@@ -14,83 +14,83 @@ function CuteCreature({ isTyping }: { isTyping: boolean }) {
       transition={{ duration: 0.4 }}
       className="relative flex items-center justify-center"
     >
-      {/* glow */}
-      <div className="absolute w-24 h-24 bg-primary/10 blur-xl rounded-full" />
+      <div className="absolute w-32 h-32 bg-primary/10 blur-xl rounded-full" />
 
-      <motion.svg
-        width="96"
-        height="96"
-        viewBox="0 0 120 120"
+      <motion.div
+        className="relative w-32 h-32"
         animate={{ y: [0, -4, 0] }}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
       >
-        {/* Body */}
-        <path
-          d="M60 105c-25 0-45-18-45-40s20-40 45-40 45 18 45 40-20 40-45 40z"
-          fill="#ABFF7A"
-        />
+        <img src="/icons/octopus.png" alt="" className="w-full h-full object-contain" />
 
-        {/* Leafs */}
-        <path d="M40 20c0-10 10-14 16-6-6 2-8 6-8 10" fill="#8BE44E" />
-        <path d="M80 20c0-10-10-14-16-6 6 2 8 6 8 10" fill="#8BE44E" />
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 128 128" fill="none">
+          <defs>
+            {/* clip each eyelid rect to its eye circle so the closing edge curves naturally */}
+            <clipPath id="clipEyeL">
+              <circle cx="46" cy="54" r="9" />
+            </clipPath>
+            <clipPath id="clipEyeR">
+              <circle cx="76" cy="54" r="9" />
+            </clipPath>
+          </defs>
 
-        {/* LEFT EYE */}
-        <g transform="translate(38,55)">
-          {/* eyeball */}
-          <circle r="12" fill="#fff" />
-
-          {/* pupil */}
-          <circle r="6" fill="#111" />
-
-          {/* highlight */}
-          <circle cx="-2" cy="-3" r="2" fill="#fff" opacity="0.9" />
-
-          {/* eyelid */}
+          {/* LEFT EYE */}
+          <circle cx="46" cy="54" r="9" fill="#fff" />
+          <circle cx="46" cy="52" r="4.5" fill="#111" />
+          <circle cx="44" cy="49.5" r="1.8" fill="#fff" opacity="0.9" />
+          {/* eyelid: rect grows down from top, clipped by circle → curved bottom edge */}
           <motion.rect
-            x="-12"
-            width="24"
+            x="37" y="45" width="18"
             fill="#ABFF7A"
-            initial={{ y: -12, height: 0 }}
-            animate={{
-              y: isTyping ? -2 : -12,
-              height: isTyping ? 14 : 0,
-            }}
-            transition={{ duration: 0.25 }}
-            rx="6"
+            clipPath="url(#clipEyeL)"
+            initial={{ height: 0 }}
+            animate={{ height: isTyping ? 11 : 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
           />
-        </g>
 
-        {/* RIGHT EYE */}
-        <g transform="translate(82,55)">
-          <circle r="12" fill="#fff" />
-          <circle r="6" fill="#111" />
-          <circle cx="-2" cy="-3" r="2" fill="#fff" opacity="0.9" />
-
+          {/* RIGHT EYE */}
+          <circle cx="76" cy="54" r="9" fill="#fff" />
+          <circle cx="76" cy="52" r="4.5" fill="#111" />
+          <circle cx="74" cy="49.5" r="1.8" fill="#fff" opacity="0.9" />
           <motion.rect
-            x="-12"
-            width="24"
+            x="67" y="45" width="18"
             fill="#ABFF7A"
-            initial={{ y: -12, height: 0 }}
-            animate={{
-              y: isTyping ? -2 : -12,
-              height: isTyping ? 14 : 0,
-            }}
-            transition={{ duration: 0.25 }}
-            rx="6"
+            clipPath="url(#clipEyeR)"
+            initial={{ height: 0 }}
+            animate={{ height: isTyping ? 11 : 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
           />
-        </g>
-      </motion.svg>
+
+          {/* MOUTH — smile at rest, cool neutral flat when focused/typing */}
+          <motion.path
+            d={isTyping
+              ? 'M 50 69 Q 61 69 72 69'
+              : 'M 50 68 Q 61 76 72 68'
+            }
+            stroke="#333"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            fill="none"
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+          />
+        </svg>
+      </motion.div>
     </motion.div>
   )
 }
 
 export default function LockScreen() {
-  const { unlock, account } = useWallet()
+  const { unlock, changePasswordFromMnemonic, account } = useWallet()
   const navigate = useNavigate()
 
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [mnemonic, setMnemonic] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [forgotError, setForgotError] = useState('')
 
   const isTyping = password.length > 0
 
@@ -108,10 +108,25 @@ export default function LockScreen() {
     }
   }
 
+  async function handleReset() {
+    setForgotError('')
+    if (!mnemonic.trim()) return setForgotError('Enter your recovery phrase')
+    if (newPassword.length < 8) return setForgotError('Password must be at least 8 characters')
+    if (newPassword !== confirmPassword) return setForgotError('Passwords do not match')
+    setIsLoading(true)
+    try {
+      const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ')
+      await changePasswordFromMnemonic(normalized, newPassword)
+      navigate('/home')
+    } catch (e: any) {
+      setForgotError(e.message ?? 'Recovery failed')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 bg-[var(--color-bg)] relative overflow-hidden">
-      
-      {/* Very subtle background blob */}
       <div className="absolute opacity-5">
         <BlobShape size={320} />
       </div>
@@ -120,41 +135,84 @@ export default function LockScreen() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative z-10 w-full max-w-[280px] flex flex-col items-center gap-6"
+        className="relative z-10 w-full max-w-[280px] flex flex-col items-center gap-4"
       >
-        {/* Creature */}
-        <CuteCreature isTyping={isTyping} />
+        {!showForgot ? (
+          <>
+            <CuteCreature isTyping={isTyping} />
 
-        {/* Title */}
-        <div className="text-center">
-          <h2 className="font-semibold text-lg tracking-tight">
-            {account?.name ?? 'SOLAI'}
-          </h2>
-          <p className="text-xs opacity-40 mt-1">
-            Enter password to unlock
-          </p>
-        </div>
+            <div className="text-center">
+              <h2 className="font-semibold text-lg tracking-tight">
+                {account?.name ?? 'SOLAI'}
+              </h2>
+              <p className="text-xs opacity-40 mt-1">Enter password to unlock</p>
+            </div>
 
-        {/* Input */}
-        <div className="w-full">
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => {
-              setPassword(e.target.value)
-              setError('')
-            }}
-            error={error}
-            autoFocus
-            onKeyDown={e => e.key === 'Enter' && handleUnlock()}
-          />
-        </div>
+            <div className="w-full">
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError('') }}
+                error={error}
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+              />
+            </div>
 
-        {/* Button */}
-        <Button fullWidth isLoading={isLoading} onClick={handleUnlock}>
-          Unlock
-        </Button>
+            <Button fullWidth isLoading={isLoading} onClick={handleUnlock}>
+              Unlock
+            </Button>
+
+            <button
+              onClick={() => setShowForgot(true)}
+              className="text-xs opacity-40 hover:opacity-70 transition-opacity"
+            >
+              Forgot password?
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="text-center">
+              <h2 className="font-semibold text-lg tracking-tight">Reset Password</h2>
+              <p className="text-xs opacity-40 mt-1">Enter your recovery phrase to set a new password</p>
+            </div>
+
+            <div className="w-full flex flex-col gap-3">
+              <textarea
+                value={mnemonic}
+                onChange={e => { setMnemonic(e.target.value); setForgotError('') }}
+                placeholder="Enter your 12-word recovery phrase..."
+                rows={3}
+                className="w-full rounded-2xl px-4 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors resize-none"
+              />
+              <Input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={e => { setNewPassword(e.target.value); setForgotError('') }}
+              />
+              <Input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={e => { setConfirmPassword(e.target.value); setForgotError('') }}
+                error={forgotError}
+              />
+            </div>
+
+            <Button fullWidth isLoading={isLoading} onClick={handleReset}>
+              Reset Password
+            </Button>
+
+            <button
+              onClick={() => { setShowForgot(false); setMnemonic(''); setNewPassword(''); setConfirmPassword(''); setForgotError('') }}
+              className="text-xs opacity-40 hover:opacity-70 transition-opacity"
+            >
+              Back to unlock
+            </button>
+          </>
+        )}
       </motion.div>
     </div>
   )
