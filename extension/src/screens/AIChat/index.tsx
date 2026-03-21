@@ -9,6 +9,14 @@ import Spinner from '../../components/ui/Spinner'
 import ActionCard from '../../components/chat/ActionCard'
 import MarkdownText from '../../components/ui/MarkdownText'
 
+const AI_PLACEHOLDERS = [
+  'swap 0.5 SOL → USDC',
+  'send 1 SOL to mom',
+  'save contact Alice',
+  'buy SOL if price drops 10%',
+  'show my balance',
+]
+
 export default function AIChatScreen() {
   const { messages, isStreaming, sendMessage, confirmAction, cancelAction, clearMessages, abort } = useAI()
   const { network } = useWallet()
@@ -17,8 +25,14 @@ export default function AIChatScreen() {
   const [input, setInput] = useState((location.state as any)?.initialMessage ?? '')
   const [hasKey, setHasKey] = useState<boolean | null>(null)
   const [error, setError] = useState('')
+  const [phIdx, setPhIdx] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isFirstScroll = useRef(true)
+
+  useEffect(() => {
+    const id = setInterval(() => setPhIdx(i => (i + 1) % AI_PLACEHOLDERS.length), 3000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     getSync('openrouterApiKey').then(k => setHasKey(!!k))
@@ -107,9 +121,19 @@ export default function AIChatScreen() {
           <div className="flex flex-col items-center gap-3 mt-10 text-center">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
             <p className="text-sm opacity-60">Add your OpenRouter API key in Settings to start chatting</p>
-            <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/settings')} className="text-xs text-primary underline">
-              Go to Settings
-            </motion.button>
+            <div className="flex flex-col items-center gap-1.5">
+              <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/settings')} className="text-xs text-primary underline">
+                Go to Settings
+              </motion.button>
+              <p className="text-[10px] opacity-40">Don't have a key?</p>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => window.open('https://openrouter.ai/keys', '_blank')}
+                className="text-xs text-primary/80 underline"
+              >
+                Get one free at openrouter.ai
+              </motion.button>
+            </div>
           </div>
         )}
         {messages.length === 0 && hasKey && (
@@ -223,7 +247,7 @@ export default function AIChatScreen() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={hasKey ? 'Ask or instruct SOLAI…' : 'Set up API key in Settings first'}
+            placeholder={hasKey ? AI_PLACEHOLDERS[phIdx] : 'Set up API key in Settings first'}
             disabled={!hasKey || isStreaming}
             className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors disabled:opacity-40"
           />

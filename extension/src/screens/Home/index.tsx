@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Header from '../../components/layout/Header'
 import BottomNav from '../../components/layout/BottomNav'
@@ -10,10 +10,24 @@ import ActionButtons from './ActionButtons'
 import FloatingParticles from '../../components/animations/FloatingParticle'
 import { useBalance } from '../../hooks/useBalance'
 
+const AI_PLACEHOLDERS = [
+  'swap 0.5 SOL → USDC',
+  'send 1 SOL to mom',
+  'save contact Alice',
+  'buy SOL if price drops 10%',
+  'show my balance',
+]
+
 export default function HomeScreen() {
   const { balances, isLoading } = useBalance()
   const navigate = useNavigate()
   const [aiInput, setAiInput] = useState('')
+  const [phIdx, setPhIdx] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setPhIdx(i => (i + 1) % AI_PLACEHOLDERS.length), 3000)
+    return () => clearInterval(id)
+  }, [])
 
   function handleAiSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -41,7 +55,7 @@ export default function HomeScreen() {
               <input
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
-                placeholder="Ask SOLAI anything..."
+                placeholder={AI_PLACEHOLDERS[phIdx]}
                 className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors shadow-lg"
               />
               <button
