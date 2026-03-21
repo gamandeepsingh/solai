@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import Header from '../../components/layout/Header'
@@ -12,6 +12,14 @@ import { useToast } from '../../components/ui/Toast'
 import { isValidSolanaAddress } from '../../lib/solana'
 import { useBalance } from '@/hooks/useBalance'
 
+const AI_PLACEHOLDERS = [
+  'swap 0.5 SOL → USDC',
+  'send 1 SOL to mom',
+  'save contact Alice',
+  'buy SOL if price drops 10%',
+  'show my balance',
+]
+
 export default function ContactsScreen() {
   const navigate = useNavigate()
   const { contacts, isLoading, add, remove } = useContacts()
@@ -24,6 +32,12 @@ export default function ContactsScreen() {
   const [isSaving, setIsSaving] = useState(false)
   const [aiInput, setAiInput] = useState('')
   const [search, setSearch] = useState('')
+  const [phIdx, setPhIdx] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setPhIdx(i => (i + 1) % AI_PLACEHOLDERS.length), 3000)
+    return () => clearInterval(id)
+  }, [])
 
   const filtered = contacts
     .slice()
@@ -43,6 +57,8 @@ export default function ContactsScreen() {
   async function handleAdd() {
     if (!name.trim()) return setError('Name is required')
     if (!isValidSolanaAddress(address)) return setError('Invalid Solana address')
+    const dup = contacts.find(c => c.address === address)
+    if (dup) return setError(`Address already saved as "${dup.name}"`)
     setIsSaving(true)
     try {
       await add({ name: name.trim(), address, note: note.trim() || undefined })
@@ -152,7 +168,7 @@ export default function ContactsScreen() {
               <input
                 value={aiInput}
                 onChange={e => setAiInput(e.target.value)}
-                placeholder="Ask SOLAI to add contact..."
+                placeholder={`Ask "${AI_PLACEHOLDERS[phIdx]}"`}
                 className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors shadow-lg"
               />
               <button
