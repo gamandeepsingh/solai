@@ -16,6 +16,8 @@ import ContactsScreen from '../screens/Contacts'
 import HistoryScreen from '../screens/History'
 import AIChatScreen from '../screens/AIChat'
 import SettingsScreen from '../screens/Settings'
+import OrdersScreen from '../screens/Orders'
+import AboutScreen from '../screens/About'
 import LockScreen from '../screens/LockScreen'
 
 function AppRoutes() {
@@ -63,8 +65,10 @@ function AppRoutes() {
       <Route path="/receive" element={<ReceiveScreen />} />
       <Route path="/contacts" element={<ContactsScreen />} />
       <Route path="/history" element={<HistoryScreen />} />
+      <Route path="/orders" element={<OrdersScreen />} />
       <Route path="/ai" element={<AIChatScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />
+      <Route path="/about" element={<AboutScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )

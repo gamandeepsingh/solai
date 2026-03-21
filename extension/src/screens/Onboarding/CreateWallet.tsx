@@ -38,7 +38,10 @@ export default function CreateWallet() {
             ))}
           </div>
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 mb-4">
-            <p className="text-xs text-yellow-400">⚠️ Never enter this phrase on any website. SOLAI will never ask for it.</p>
+            <div className="flex items-start gap-1.5">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400 shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <p className="text-xs text-yellow-400">Never enter this phrase on any website. SOLAI will never ask for it.</p>
+            </div>
           </div>
           <Button
             fullWidth

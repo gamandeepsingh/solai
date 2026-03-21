@@ -3,7 +3,8 @@ import { streamChat } from '../lib/openrouter'
 import { runAgentTurn, SOL_RESERVE } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
-import { addScheduledJob, ensureSchedulerAlarm, addConditionalOrder, ensurePriceAlarm } from '../lib/scheduler'
+import { addScheduledJob, ensureSchedulerAlarm, ensurePriceAlarm } from '../lib/scheduler'
+import { saveOrder } from '../lib/orders'
 import { getSync, getSession, setSession } from '../lib/storage'
 import { logTx } from '../lib/history'
 import { saveContact } from '../lib/contacts'
@@ -193,17 +194,16 @@ export function AIProvider({ children }: { children: ReactNode }) {
         toast('Recurring payment scheduled!', 'success')
       }
 
-      else if (kind === 'conditional') {
-        await addConditionalOrder({
-          token: params.token,
-          condition: params.condition,
-          targetPriceUsd: params.targetPriceUsd,
-          action: params.action,
-          actionLabel: params.actionLabel,
+      else if (kind === 'conditional_order') {
+        await saveOrder({
+          ...params,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
         })
         ensurePriceAlarm()
         updateMsg(setMessages, messageId, { actionState: 'done' })
-        toast('Conditional order set!', 'success')
+        const dir = params.direction === 'below' ? 'drops to' : 'rises to'
+        toast(`Order set — buy ${params.buyToken} when price ${dir} $${params.triggerPrice.toFixed(2)}`, 'success')
       }
 
       else if (kind === 'balance') {

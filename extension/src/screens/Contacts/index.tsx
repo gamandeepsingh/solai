@@ -10,6 +10,7 @@ import Spinner from '../../components/ui/Spinner'
 import { useContacts } from '../../hooks/useContacts'
 import { useToast } from '../../components/ui/Toast'
 import { isValidSolanaAddress } from '../../lib/solana'
+import { useBalance } from '@/hooks/useBalance'
 
 export default function ContactsScreen() {
   const navigate = useNavigate()
@@ -21,6 +22,23 @@ export default function ContactsScreen() {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [aiInput, setAiInput] = useState('')
+  const [search, setSearch] = useState('')
+
+  const filtered = contacts
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter(c =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.address.toLowerCase().includes(search.toLowerCase())
+    )
+  
+  function handleAiSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!aiInput.trim()) return
+    navigate('/ai', { state: { initialMessage: aiInput } })
+    setAiInput('')
+  }
 
   async function handleAdd() {
     if (!name.trim()) return setError('Name is required')
@@ -40,7 +58,7 @@ export default function ContactsScreen() {
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg)] relative">
       <Header />
-      <div className="flex-1 flex flex-col px-4 pb-16 overflow-y-auto">
+      <div className="flex-1 flex flex-col px-4 pb-32 overflow-y-auto">
         <div className="flex items-center justify-between py-3">
           <h2 className="text-lg font-bold">Contacts</h2>
           <motion.button
@@ -48,6 +66,18 @@ export default function ContactsScreen() {
             onClick={() => setShowAdd(true)}
             className="w-8 h-8 rounded-full bg-primary text-black flex items-center justify-center font-bold text-lg"
           >+</motion.button>
+        </div>
+
+        <div className="relative mb-3">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 opacity-30" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search contacts..."
+            className="w-full rounded-2xl pl-9 pr-4 py-2 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors"
+          />
         </div>
 
         {isLoading ? (
@@ -67,7 +97,7 @@ export default function ContactsScreen() {
         ) : (
           <div className="flex flex-col gap-2">
             <AnimatePresence>
-              {contacts.map((c, i) => (
+              {filtered.map((c, i) => (
                 <motion.div
                   key={c.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -94,13 +124,21 @@ export default function ContactsScreen() {
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => { navigator.clipboard.writeText(c.address); toast('Address copied!', 'success') }}
-                      className="text-[10px] px-2 py-1 rounded-full border border-[var(--color-border)] opacity-60"
-                    >Copy</motion.button>
+                      className="w-7 h-7 rounded-full border border-[var(--color-border)] opacity-60 flex items-center justify-center"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    </motion.button>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
                       onClick={() => remove(c.id)}
-                      className="text-[10px] px-2 py-1 rounded-full border border-red-500/30 text-red-400"
-                    >✕</motion.button>
+                      className="w-7 h-7 rounded-full border border-red-500/30 text-red-400 flex items-center justify-center"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </motion.button>
                   </div>
                 </motion.div>
               ))}
@@ -108,6 +146,28 @@ export default function ContactsScreen() {
           </div>
         )}
       </div>
+      <div className="absolute bottom-16 left-0 right-0 px-4 pb-2 z-20">
+          <form onSubmit={handleAiSubmit}>
+            <motion.div whileFocus={{ scale: 1.01 }} className="relative">
+              <input
+                value={aiInput}
+                onChange={e => setAiInput(e.target.value)}
+                placeholder="Ask SOLAI to add contact..."
+                className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors shadow-lg"
+              />
+              <button
+                type="submit"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary flex items-center justify-center disabled:opacity-30"
+                disabled={!aiInput.trim()}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+            </motion.div>
+          </form>
+        </div>
       <BottomNav />
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Contact">

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAI } from '../../context/AIContext'
+import { useWallet } from '../../context/WalletContext'
 import { getSync } from '../../lib/storage'
 import BottomNav from '../../components/layout/BottomNav'
 import Spinner from '../../components/ui/Spinner'
@@ -10,6 +11,7 @@ import MarkdownText from '../../components/ui/MarkdownText'
 
 export default function AIChatScreen() {
   const { messages, isStreaming, sendMessage, confirmAction, cancelAction, clearMessages, abort } = useAI()
+  const { network } = useWallet()
   const location = useLocation()
   const navigate = useNavigate()
   const [input, setInput] = useState((location.state as any)?.initialMessage ?? '')
@@ -66,12 +68,9 @@ export default function AIChatScreen() {
         </div>
         <div>
           <p className="text-sm font-semibold">SOLAI Assistant</p>
-          <p className="text-[10px] opacity-40">{isStreaming ? 'Thinking…' : 'Online'}</p>
+          <p className="text-[10px] opacity-40">{isStreaming ? 'Thinking…' : 'Online'} · <span className="capitalize">{network}</span></p>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          {isStreaming && (
-            <motion.button onClick={abort} className="text-[10px] opacity-50 hover:opacity-100 px-2">Stop</motion.button>
-          )}
           {messages.length > 0 && !isStreaming && (
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -87,13 +86,26 @@ export default function AIChatScreen() {
               </svg>
             </motion.button>
           )}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate("/settings")}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+            title="Settings"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" />
+              <circle cx="8" cy="6" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+              <circle cx="16" cy="12" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+              <circle cx="8" cy="18" r="2" fill="currentColor" stroke="currentColor" strokeWidth="0" />
+            </svg>
+          </motion.button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 pb-0 flex flex-col gap-3">
         {messages.length === 0 && !hasKey && (
           <div className="flex flex-col items-center gap-3 mt-10 text-center">
-            <span className="text-3xl">🔑</span>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
             <p className="text-sm opacity-60">Add your OpenRouter API key in Settings to start chatting</p>
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => navigate('/settings')} className="text-xs text-primary underline">
               Go to Settings

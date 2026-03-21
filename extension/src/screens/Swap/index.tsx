@@ -192,7 +192,7 @@ export default function SwapScreen() {
           {step === 'done' && (
             <motion.div key="done" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-5 mt-10">
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-3xl">✓</span>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
               <h2 className="text-xl font-bold">Swapped!</h2>
               <a

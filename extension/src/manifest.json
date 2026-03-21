@@ -26,7 +26,6 @@
     "https://api.mainnet-beta.solana.com/*",
     "https://api.devnet.solana.com/*",
     "https://openrouter.ai/*",
-    "http://localhost:4000/*",
     "https://quote-api.jup.ag/*",
     "https://api.jup.ag/*",
     "https://api.coingecko.com/*",
