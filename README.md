@@ -70,7 +70,7 @@ SOLAI will appear in your extensions bar. Pin it for quick access.
 
 ```bash
 pnpm install
-pnpm dev
+pnpm build
 ```
 
 Then load the built output:
