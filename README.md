@@ -50,7 +50,7 @@ The easiest way to try SOLAI — no Node.js or build tools needed.
 **1. Download the extension**
 
 - Go to the [Releases](../../releases) page on GitHub
-- Download the latest `v1.0.0.zip`
+- Download the latest `v1.0.1.zip`
 - Unzip it anywhere on your computer — you'll get a folder called `dist/`
 
 **2. Load into Chrome**
