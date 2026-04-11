@@ -21,21 +21,16 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: extension/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
 
       - name: Install dependencies
         working-directory: extension
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Bump version in manifest + package.json
         id: version
@@ -72,7 +67,7 @@ jobs:
 
       - name: Build extension
         working-directory: extension
-        run: pnpm build
+        run: npm run build
 
       - name: Zip dist
         working-directory: extension
