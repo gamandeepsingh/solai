@@ -41,6 +41,12 @@
     "https://mainnet.helius-rpc.com/*",
     "https://token.jup.ag/*"
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*.png"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [
