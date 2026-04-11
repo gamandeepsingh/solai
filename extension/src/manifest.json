@@ -1,20 +1,20 @@
 {
   "manifest_version": 3,
   "name": "SOLAI Wallet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Your friendly Solana wallet",
   "icons": {
-    "16":  "icons/icon16.png",
-    "32":  "icons/icon32.png",
-    "48":  "icons/icon48.png",
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "action": {
     "default_popup": "src/popup/index.html",
     "default_icon": {
-      "16":  "icons/icon16.png",
-      "32":  "icons/icon32.png",
-      "48":  "icons/icon48.png",
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
@@ -24,7 +24,13 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self' https://api.mainnet-beta.solana.com wss://api.mainnet-beta.solana.com https://api.devnet.solana.com wss://api.devnet.solana.com https://openrouter.ai https://quote-api.jup.ag https://api.jup.ag https://api.coingecko.com https://mainnet.helius-rpc.com wss://mainnet.helius-rpc.com https://token.jup.ag;"
   },
-  "permissions": ["storage", "alarms", "clipboardWrite", "notifications", "windows"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "clipboardWrite",
+    "notifications",
+    "windows"
+  ],
   "host_permissions": [
     "https://api.mainnet-beta.solana.com/*",
     "https://api.devnet.solana.com/*",
@@ -37,14 +43,22 @@
   ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/inject.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/inject.ts"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/content/index.ts"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/index.ts"
+      ],
       "run_at": "document_start"
     }
   ]
