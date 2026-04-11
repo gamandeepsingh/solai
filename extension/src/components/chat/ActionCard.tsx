@@ -70,12 +70,21 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
       { label: 'Execution', value: 'Auto via Jupiter' },
     ]
 
-    if (kind === 'balance') return [
-      { label: 'SOL', value: `${params.solBalance.toFixed(4)} SOL${params.solUsdValue ? ` (~$${params.solUsdValue.toFixed(2)})` : ''}` },
-      { label: 'USDC', value: `${params.usdcBalance.toFixed(2)} USDC` },
-      { label: 'USDT', value: `${params.usdtBalance.toFixed(2)} USDT` },
-      ...(params.totalUsdValue ? [{ label: 'Total', value: `$${params.totalUsdValue.toFixed(2)} USD` }] : []),
-    ]
+    if (kind === 'balance') {
+      const rows: Row[] = (params.allBalances ?? []).map((b: { symbol: string; amount: number; usdValue?: number }) => {
+        const amt = b.symbol === 'SOL'
+          ? b.amount.toFixed(4)
+          : b.amount < 0.001
+          ? b.amount.toExponential(2)
+          : b.symbol === 'BONK'
+          ? b.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })
+          : b.amount.toFixed(2)
+        const usd = b.usdValue ? ` (~$${b.usdValue.toFixed(2)})` : ''
+        return { label: b.symbol, value: `${amt} ${b.symbol}${usd}` }
+      })
+      if (params.totalUsdValue) rows.push({ label: 'Total', value: `$${params.totalUsdValue.toFixed(2)} USD` })
+      return rows
+    }
 
     if (kind === 'add_contact') return [
       { label: 'Name', value: params.name },

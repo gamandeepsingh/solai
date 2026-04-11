@@ -1,4 +1,4 @@
-export type AgentToken = 'SOL' | 'USDC' | 'USDT'
+export type AgentToken = 'SOL' | 'USDC' | 'USDT' | 'JUP' | 'BONK' | 'PYTH' | 'HNT' | 'RAY' | 'JTO' | 'ORCA' | 'GMT' | 'SRM' | 'COPE'
 export type ActionState = 'pending' | 'executing' | 'done' | 'cancelled' | 'error'
 
 export interface SendParams {

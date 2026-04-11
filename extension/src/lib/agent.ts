@@ -13,6 +13,12 @@ export type AgentResult = ActionParams | string | null
 // 890,880 lamports rent-exempt + ~5,000 lamports fee = ~895,880. Use 0.00095 SOL as reserve.
 export const SOL_RESERVE = 0.00095
 
+export interface AgentTokenBalance {
+  symbol: string
+  amount: number
+  usdValue?: number
+}
+
 export interface AgentContext {
   publicKey: string
   network: Network
@@ -22,6 +28,8 @@ export interface AgentContext {
   usdtBalance: number
   solUsdValue: number
   totalUsdValue: number
+  /** All tokens the user currently holds (amount > 0) */
+  allBalances: AgentTokenBalance[]
 }
 
 const INTERVAL_MAP: Record<string, number> = {
@@ -71,13 +79,13 @@ export const AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'send_token',
-      description: 'Send SOL or USDC to a recipient. Use when the user wants to transfer tokens to someone.',
+      description: 'Send any Solana token to a recipient. Use when the user wants to transfer tokens to someone.',
       parameters: {
         type: 'object',
         properties: {
           recipient: { type: 'string', description: 'Solana wallet address OR contact name (e.g. "Alice", "mom")' },
           amount: { type: 'number', description: 'Amount to send' },
-          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
+          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'] },
           amountIsUsd: { type: 'boolean', description: 'True if amount is in USD (e.g. "$5")' },
         },
         required: ['recipient', 'amount', 'token'],
@@ -88,12 +96,12 @@ export const AGENT_TOOLS = [
     type: 'function',
     function: {
       name: 'swap_tokens',
-      description: 'Swap between SOL and USDC via Jupiter DEX. Use for "buy SOL", "swap USDC to SOL", "exchange" etc.',
+      description: 'Swap between any Solana tokens via Jupiter DEX. Use for "buy SOL", "swap USDC to SOL", "swap JUP to BONK", "exchange" etc.',
       parameters: {
         type: 'object',
         properties: {
-          inputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
-          outputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
+          inputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'] },
+          outputToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'] },
           inputAmount: { type: 'number', description: 'Amount of input token to swap' },
           slippageBps: { type: 'number', description: 'Slippage in basis points, default 50' },
         },
@@ -111,7 +119,7 @@ export const AGENT_TOOLS = [
         properties: {
           recipient: { type: 'string' },
           amount: { type: 'number' },
-          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT'] },
+          token: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'] },
           amountIsUsd: { type: 'boolean' },
           intervalLabel: { type: 'string', description: 'One of: hourly, daily, weekly, monthly' },
         },
@@ -127,8 +135,8 @@ export const AGENT_TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          buyToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'], description: 'Token to receive' },
-          spendToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT'], description: 'Token to spend' },
+          buyToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'], description: 'Token to receive' },
+          spendToken: { type: 'string', enum: ['SOL', 'USDC', 'USDT', 'JUP', 'BONK', 'PYTH', 'HNT', 'RAY', 'JTO', 'ORCA', 'GMT', 'SRM', 'COPE'], description: 'Token to spend' },
           spendAmount: { type: 'number', description: 'Amount of spendToken to use' },
           percentChange: { type: 'number', description: 'Percent change to trigger. Negative = drop (e.g. -10 for 10% drop), positive = rise.' },
         },
@@ -180,6 +188,20 @@ export const AGENT_TOOLS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'respond_to_user',
+      description: 'Send a plain-text reply. Use ONLY for general questions, explanations, or anything that is NOT a wallet action. Never use this for send, swap, schedule, balance, or contact actions — use the specific tool for those instead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', description: 'The response text to show the user' },
+        },
+        required: ['message'],
+      },
+    },
+  },
 ]
 
 export async function runAgentTurn(
@@ -189,23 +211,37 @@ export async function runAgentTurn(
   model: string,
   ctx: AgentContext
 ): Promise<AgentResult> {
-  const systemPrompt = `You are SOLAI, an agentic Solana wallet assistant.
+  const balanceLines = ctx.allBalances.length
+    ? ctx.allBalances.map(b => `  ${b.symbol}: ${b.amount} ${b.usdValue !== undefined ? `(~$${b.usdValue.toFixed(2)})` : ''}`).join('\n')
+    : '  No tokens held'
+
+  const systemPrompt = `You are SOLAI, an agentic Solana wallet assistant. You MUST always call a tool — never reply with plain text.
+
 Wallet address: ${ctx.publicKey}
 Network: ${ctx.network}
-SOL balance: ${ctx.solBalance.toFixed(6)} SOL (~$${ctx.solUsdValue.toFixed(2)}) — max sendable: ${ctx.solMaxSendable.toFixed(6)} SOL (fee + rent reserved)
-USDC balance: ${ctx.usdcBalance.toFixed(2)} USDC
-USDT balance: ${ctx.usdtBalance.toFixed(2)} USDT
 Total portfolio: ~$${ctx.totalUsdValue.toFixed(2)} USD
 
-IMPORTANT: When sending SOL, NEVER exceed ${ctx.solMaxSendable.toFixed(6)} SOL. If the user says "send all" or "max", use exactly ${ctx.solMaxSendable.toFixed(6)} SOL.
-For actionable requests (send, swap, schedule, balance check, conditional orders) — call the appropriate tool.
-For questions about crypto, Solana, DeFi, tokens, wallets, or blockchain — reply in plain text.
-For anything unrelated to crypto or wallets (math, essays, general knowledge, etc.) — politely decline and remind the user you are a wallet assistant.
+Current balances:
+${balanceLines}
+
+TOOL USAGE RULES (follow exactly):
+- "send X TOKEN to Y" → call send_token immediately. recipient can be a wallet address OR a contact name (e.g. "aman", "mom", "Alice"). Pass the name as-is.
+- "swap X for Y" / "buy X" / "exchange" → call swap_tokens
+- "every day/week/month" payment → call schedule_payment
+- "buy X if price drops/rises Y%" → call create_conditional_order
+- "my balance" / "how much do I have" → call get_balance
+- "add contact" / "save address" → call add_contact
+- "show contacts" / "what is X address" → call get_contacts
+- "recurring payments" / "scheduled" → call list_schedules
+- Everything else (questions, explanations) → call respond_to_user with your answer
+
+CRITICAL: NEVER use respond_to_user for send/swap/schedule/balance actions. ALWAYS call the specific action tool.
+Supported tokens: SOL, USDC, USDT, JUP, BONK, PYTH, HNT, RAY, JTO, ORCA, GMT, SRM, COPE.
+When sending SOL, NEVER exceed ${ctx.solMaxSendable.toFixed(6)} SOL (fee reserved).
 When user says "$X" or "X dollars", set amountIsUsd=true.
-When user names a contact (e.g. "mom", "Alice"), pass the name as-is to recipient.
-Never ask for private keys or seed phrases.
-Conditional orders: only SOL, USDC, USDT are supported (Solana wallet). If asked to buy ETH, BTC, or other non-Solana tokens, explain only SOL/USDC/USDT are available.
-For "buy X if price drops Y%", use create_conditional_order. percentChange is negative for drops (e.g. -10 for 10% drop), positive for rises.`
+For conditional orders, only use tokens with a CoinGecko price feed (SOL, USDC, USDT).
+percentChange is negative for drops (e.g. -10 for 10% drop), positive for rises.
+Never ask for private keys or seed phrases.`
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -223,12 +259,21 @@ For "buy X if price drops Y%", use create_conditional_order. percentChange is ne
   switch (call.function.name) {
     case 'send_token': {
       const params = await resolveSendParams(args)
-      const rawBalance = params.token === 'SOL' ? ctx.solBalance : params.token === 'USDC' ? ctx.usdcBalance : ctx.usdtBalance
+
+      if (params.amount <= 0) throw new Error('Amount must be greater than 0')
+
+      const held = ctx.allBalances.find(b => b.symbol === params.token)
+      const rawBalance = held?.amount ?? 0
       const available = params.token === 'SOL' ? Math.max(0, rawBalance - SOL_RESERVE) : rawBalance
+
+      if (available === 0) throw new Error(`You don't have any ${params.token} to send`)
+
       const eps = 1e-6
       if (params.amount > available + eps) {
-        const have = params.token === 'SOL' ? available.toFixed(6) : available.toFixed(2)
-        throw new Error(`Insufficient ${params.token} — max sendable is ${have} ${params.token}${params.token === 'SOL' ? ' (0.001 SOL reserved for fee + rent)' : ''}`)
+        const have = params.token === 'SOL'
+          ? available.toFixed(6)
+          : available < 0.001 ? available.toExponential(2) : available.toFixed(4)
+        throw new Error(`Insufficient ${params.token} — max sendable is ${have} ${params.token}${params.token === 'SOL' ? ' (fee reserved)' : ''}`)
       }
       return { kind: 'send', params }
     }
@@ -293,10 +338,7 @@ For "buy X if price drops Y%", use create_conditional_order. percentChange is ne
       return {
         kind: 'balance',
         params: {
-          solBalance: ctx.solBalance,
-          usdcBalance: ctx.usdcBalance,
-          usdtBalance: ctx.usdtBalance,
-          solUsdValue: ctx.solUsdValue,
+          allBalances: ctx.allBalances.filter(b => b.amount > 0),
           totalUsdValue: ctx.totalUsdValue,
         },
       }
@@ -324,6 +366,9 @@ For "buy X if price drops Y%", use create_conditional_order. percentChange is ne
       if (!jobs.length) return 'You have no active recurring payments.'
       return { kind: 'list_schedules', params: { jobs } }
     }
+
+    case 'respond_to_user':
+      return args.message as string
 
     default:
       return null

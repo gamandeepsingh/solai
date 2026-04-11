@@ -19,9 +19,24 @@ const MINT: Record<AgentToken, string> = {
   SOL:  'So11111111111111111111111111111111111111112',
   USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  JUP:  'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+  BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  PYTH: 'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3',
+  HNT:  'hntyVP6YFm1Hg25TN9WGLqM12b8TQmcknKrdu1oxWux',
+  RAY:  '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+  JTO:  'jtojtomepa8bdBCVqzm8E6cXB6zyRsGAbKp5RaGKimNV',
+  ORCA: 'orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE',
+  GMT:  '7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx',
+  SRM:  'SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt',
+  COPE: '8HGyAAB1yoM1ttS7pXjHMa3dukTFGQggnFFH3hJZgzQh',
 }
 
-const DECIMALS: Record<AgentToken, number> = { SOL: 1e9, USDC: 1e6, USDT: 1e6 }
+const DECIMALS: Record<AgentToken, number> = {
+  SOL: 1e9, USDC: 1e6, USDT: 1e6,
+  JUP: 1e6, BONK: 1e5, PYTH: 1e6,
+  HNT: 1e8, RAY: 1e6, JTO: 1e9,
+  ORCA: 1e6, GMT: 1e9, SRM: 1e6, COPE: 1e6,
+}
 
 export interface JupiterQuote {
   inputMint: string

@@ -19,6 +19,9 @@ import SettingsScreen from '../screens/Settings'
 import OrdersScreen from '../screens/Orders'
 import AboutScreen from '../screens/About'
 import LockScreen from '../screens/LockScreen'
+import NFTsScreen from '../screens/NFTs'
+import TokenDetailScreen from '../screens/TokenDetail'
+import ExploreScreen from '../screens/Explore'
 
 function AppRoutes() {
   const { init, isLoading, isLocked, account } = useWallet()
@@ -68,6 +71,9 @@ function AppRoutes() {
       <Route path="/orders" element={<OrdersScreen />} />
       <Route path="/ai" element={<AIChatScreen />} />
       <Route path="/settings" element={<SettingsScreen />} />
+      <Route path="/nfts" element={<NFTsScreen />} />
+      <Route path="/token" element={<TokenDetailScreen />} />
+      <Route path="/explore" element={<ExploreScreen />} />
       <Route path="/about" element={<AboutScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>

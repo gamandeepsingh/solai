@@ -2,6 +2,12 @@ import type { ChatMessage } from '../types/ai'
 
 const BASE_URL = 'https://openrouter.ai/api/v1'
 
+// HTTP/1.1 headers must be ISO-8859-1. Strip any characters outside that range
+// (most commonly happens when an API key is pasted with invisible unicode chars).
+function sanitizeHeaderValue(s: string): string {
+  return s.trim().replace(/[^\x20-\x7E]/g, '')
+}
+
 export async function streamChat(
   messages: ChatMessage[],
   apiKey: string,
@@ -11,11 +17,12 @@ export async function streamChat(
   signal?: AbortSignal
 ): Promise<void> {
   const payload = messages.map(m => ({ role: m.role, content: m.content }))
+  const cleanKey = sanitizeHeaderValue(apiKey)
 
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${cleanKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'chrome-extension://solai-wallet',
       'X-Title': 'SOLAI Wallet',
@@ -67,17 +74,19 @@ export async function callWithTools(
   messages: Array<{ role: string; content: string }>,
   apiKey: string,
   model: string,
-  tools: unknown[]
+  tools: unknown[],
+  toolChoice: 'auto' | 'required' = 'required'
 ): Promise<{ content: string | null; toolCalls: ToolCall[] | null }> {
+  const cleanKey = sanitizeHeaderValue(apiKey)
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${cleanKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'chrome-extension://solai-wallet',
       'X-Title': 'SOLAI Wallet',
     },
-    body: JSON.stringify({ model, messages, tools, tool_choice: 'auto', stream: false }),
+    body: JSON.stringify({ model, messages, tools, tool_choice: toolChoice, stream: false }),
   })
 
   if (!res.ok) {

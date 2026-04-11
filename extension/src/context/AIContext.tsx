@@ -2,10 +2,11 @@ import { createContext, useContext, useState, useCallback, useRef, useEffect, ty
 import { streamChat } from '../lib/openrouter'
 import { runAgentTurn, SOL_RESERVE } from '../lib/agent'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
-import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
+import { sendSol, sendSplToken } from '../lib/solana'
+import { CURATED_TOKENS, getMintForNetwork } from '../lib/tokens'
 import { addScheduledJob, ensureSchedulerAlarm, ensurePriceAlarm } from '../lib/scheduler'
 import { saveOrder } from '../lib/orders'
-import { getSync, getSession, setSession } from '../lib/storage'
+import { getLocal, getSession, setSession } from '../lib/storage'
 import { logTx } from '../lib/history'
 import { saveContact } from '../lib/contacts'
 import type { AgentResult } from '../lib/agent'
@@ -37,7 +38,7 @@ function updateMsg(
 
 export function AIProvider({ children }: { children: ReactNode }) {
   const { keypair, network, account } = useWallet()
-  const { balances } = useBalance()
+  const { ownedBalances: balances } = useBalance()
   const { toast } = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -58,7 +59,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
   }, [messages])
 
   const sendMessage = useCallback(async (content: string) => {
-    const apiKey = await getSync('openrouterApiKey')
+    const apiKey = await getLocal('openrouterApiKey')
     if (!apiKey) throw new Error('No API key — add your OpenRouter key in Settings')
 
     const userMsg: ChatMessage = {
@@ -81,6 +82,11 @@ export function AIProvider({ children }: { children: ReactNode }) {
       usdtBalance: usdt,
       solUsdValue,
       totalUsdValue,
+      allBalances: balances.map(b => ({
+        symbol: b.meta.symbol,
+        amount: b.amount,
+        usdValue: b.usdValue,
+      })),
     }
 
     // Phase 1: agent intent detection
@@ -124,7 +130,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }
     setMessages(prev => [...prev, assistantMsg])
 
-    const systemPrompt = `You are SOLAI, a friendly Solana wallet assistant. Wallet: ${ctx.publicKey}. Network: ${network}. Balances: ${sol.toFixed(4)} SOL, ${usdc.toFixed(2)} USDC, ${usdt.toFixed(2)} USDT. Be concise and helpful. Never ask for private keys or seed phrases.`
+    const balanceSummary = ctx.allBalances
+      .map(b => `${b.symbol}: ${b.amount}`)
+      .join(', ')
+    const systemPrompt = `You are SOLAI, a friendly Solana wallet assistant. Wallet: ${ctx.publicKey}. Network: ${network}. Balances: ${balanceSummary}. Total: ~$${totalUsdValue.toFixed(2)}. Be concise and helpful. Never ask for private keys or seed phrases.`
     const history: ChatMessage[] = [
       { id: 'sys', role: 'system', content: systemPrompt, timestamp: 0 },
       ...messages.slice(-16),
@@ -163,11 +172,15 @@ export function AIProvider({ children }: { children: ReactNode }) {
       const { kind, params } = msg.action as any
 
       if (kind === 'send') {
-        const sig = params.token === 'SOL'
-          ? await sendSol(keypair, params.recipient, params.amount, network)
-          : params.token === 'USDT'
-            ? await sendUsdt(keypair, params.recipient, params.amount, network)
-            : await sendUsdc(keypair, params.recipient, params.amount, network)
+        let sig: string
+        if (params.token === 'SOL') {
+          sig = await sendSol(keypair, params.recipient, params.amount, network)
+        } else {
+          const meta = CURATED_TOKENS.find(t => t.symbol === params.token)
+          if (!meta) throw new Error(`Unsupported token: ${params.token}`)
+          const mint = getMintForNetwork(meta, network)
+          sig = await sendSplToken(keypair, params.recipient, params.amount, mint, network, meta.decimals)
+        }
         updateMsg(setMessages, messageId, { actionState: 'done', txSignature: sig })
         toast('Sent successfully!', 'success')
         logTx({ sig, type: 'send', timestamp: Date.now(), amount: params.amount, token: params.token, toOrFrom: params.recipient, status: 'success' })

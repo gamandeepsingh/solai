@@ -1,0 +1,109 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip commits made by the bot itself (version bumps) to avoid infinite loop
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: extension/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: extension
+        run: pnpm install --frozen-lockfile
+
+      - name: Bump version in manifest + package.json
+        id: version
+        working-directory: extension
+        run: |
+          # Read current manifest version
+          CURRENT=$(node -p "require('./src/manifest.json').version")
+          echo "Current version: $CURRENT"
+
+          # Split into parts and bump patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+
+          # Update manifest.json
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('src/manifest.json', 'utf8'));
+            m.version = '$NEW_VERSION';
+            fs.writeFileSync('src/manifest.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+          # Update package.json
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            p.version = '$NEW_VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build extension
+        working-directory: extension
+        run: pnpm build
+
+      - name: Zip dist
+        working-directory: extension
+        run: |
+          cd dist
+          zip -r ../solai-wallet-${{ steps.version.outputs.new_version }}.zip .
+          cd ..
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extension/src/manifest.json extension/package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+          git push origin main
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "SOLAI Wallet ${{ steps.version.outputs.tag }}"
+          body: |
+            ## SOLAI Wallet ${{ steps.version.outputs.tag }}
+
+            ### Install
+            1. Download `solai-wallet-${{ steps.version.outputs.new_version }}.zip`
+            2. Unzip it
+            3. Open Chrome → `chrome://extensions` → enable **Developer mode**
+            4. Click **Load unpacked** → select the unzipped folder
+
+            ---
+            Built from commit ${{ github.sha }} on `main`
+          files: extension/solai-wallet-${{ steps.version.outputs.new_version }}.zip
+          make_latest: true

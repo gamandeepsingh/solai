@@ -3,6 +3,8 @@ import type { Contact } from '../types/contacts'
 import type { ScheduledJob } from '../types/agent'
 import type { ConditionalOrder } from '../types/orders'
 import type { TxRecord } from '../types/history'
+import type { NFTAsset } from '../types/nft'
+import { encryptForStorage, decryptFromStorage } from './crypto'
 
 type LocalData = {
   keystore: EncryptedKeystore        // legacy — kept for migration only
@@ -15,24 +17,38 @@ type LocalData = {
   scheduledJobs: ScheduledJob[]
   conditionalOrders: ConditionalOrder[]
   txLog: TxRecord[]
+  failedLoginAttempts: number
+  lockoutUntil: number
+  openrouterApiKey: string
+  tokenMetadataCache: Record<string, import('../types/tokens').TokenMeta>
+  customNFTs: NFTAsset[]
+  cachedSplBalances: Record<string, number>
 }
 
 type SyncData = {
-  theme: 'light' | 'dark'
+  theme: 'light' | 'dark' | 'system'
   network: Network
-  openrouterApiKey: string
   walletName: string
   customRpcUrl: string
 }
 
 export async function getLocal<K extends keyof LocalData>(key: K): Promise<LocalData[K] | undefined> {
-  return new Promise(resolve => {
+  const raw: string | undefined = await new Promise(resolve => {
     chrome.storage.local.get(key, result => resolve(result[key]))
   })
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'string') return raw as LocalData[K]
+  try {
+    const decrypted = await decryptFromStorage(raw)
+    return JSON.parse(decrypted) as LocalData[K]
+  } catch {
+    try { return JSON.parse(raw) as LocalData[K] } catch { return raw as LocalData[K] }
+  }
 }
 
 export async function setLocal<K extends keyof LocalData>(key: K, value: LocalData[K]): Promise<void> {
-  return new Promise(resolve => chrome.storage.local.set({ [key]: value }, resolve))
+  const encrypted = await encryptForStorage(JSON.stringify(value))
+  return new Promise(resolve => chrome.storage.local.set({ [key]: encrypted }, resolve))
 }
 
 export async function removeLocal(key: keyof LocalData): Promise<void> {

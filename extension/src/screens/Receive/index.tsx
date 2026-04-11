@@ -6,9 +6,11 @@ import BottomNav from '../../components/layout/BottomNav'
 import CopyButton from '../../components/ui/CopyButton'
 import FadeIn from '../../components/animations/FadeIn'
 import { useWallet } from '../../context/WalletContext'
+import { useTheme } from '../../context/ThemeContext'
 
 export default function ReceiveScreen() {
   const { account } = useWallet()
+  const { theme } = useTheme()
   const navigate = useNavigate()
   const address = account?.publicKey ?? ''
 
@@ -29,7 +31,7 @@ export default function ReceiveScreen() {
               value={address}
               size={180}
               bgColor="transparent"
-              fgColor="#ABFF7A"
+              fgColor={theme === 'light' ? '#000000' : '#ABFF7A'}
               level="M"
             />
           </motion.div>

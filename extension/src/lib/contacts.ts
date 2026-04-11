@@ -30,3 +30,15 @@ export async function removeContact(id: string): Promise<void> {
   const all = await getContacts()
   await setLocal('contacts', all.filter(c => c.id !== id))
 }
+
+export async function updateContactInteraction(address: string): Promise<void> {
+  const all = await getContacts()
+  const idx = all.findIndex(c => c.address === address)
+  if (idx === -1) return
+  all[idx] = {
+    ...all[idx],
+    lastInteractionAt: new Date().toISOString(),
+    sentCount: (all[idx].sentCount ?? 0) + 1,
+  }
+  await setLocal('contacts', all)
+}
