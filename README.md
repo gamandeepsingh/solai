@@ -1,6 +1,6 @@
 # SOLAI Wallet 🟢
 
-![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Platform](https://img.shields.io/badge/platform-Chrome%20Extension-yellow)
+![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Platform](https://img.shields.io/badge/platform-Chrome%20Extension-yellow)
 
 Minimal, AI-first Solana wallet built as a Chrome Extension.
 <img width="1280" height="800" alt="1" src="https://github.com/user-attachments/assets/ff16e8e7-c422-4852-8b4b-40467f74e633" />

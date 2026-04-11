@@ -8,7 +8,7 @@ import Input from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
 import { useWallet } from '../../context/WalletContext'
 import { useTheme } from '../../context/ThemeContext'
-import { getSync, setSync } from '../../lib/storage'
+import { getLocal, setLocal, getSync, setSync } from '../../lib/storage'
 import { getMnemonicFromKeystore } from '../../lib/wallet'
 import FadeIn from '../../components/animations/FadeIn'
 import type { Network } from '../../types/wallet'
@@ -18,7 +18,7 @@ const NETWORKS: Network[] = ['mainnet', 'devnet']
 export default function SettingsScreen() {
   const navigate = useNavigate()
   const { account, network, setNetwork, lock, changePassword } = useWallet()
-  const { theme, toggle } = useTheme()
+  const { theme, themeSetting, setThemeSetting } = useTheme()
   const [apiKey, setApiKey] = useState('')
   const [savedKey, setSavedKey] = useState('')
   const [showSeedModal, setShowSeedModal] = useState(false)
@@ -51,15 +51,16 @@ export default function SettingsScreen() {
   }
 
   useEffect(() => {
-    getSync('openrouterApiKey').then(k => { if (k) { setSavedKey(k); setApiKey(k) } })
+    getLocal('openrouterApiKey').then(k => { if (k) { setSavedKey(k); setApiKey(k) } })
   }, [])
 
   async function saveApiKey() {
     setIsSavingKey(true)
-    await setSync('openrouterApiKey', apiKey)
+    await setLocal('openrouterApiKey', apiKey)
     setSavedKey(apiKey)
     setTimeout(() => setIsSavingKey(false), 500)
   }
+
 
   async function revealSeed() {
     if (!account?.keystore) return
@@ -94,18 +95,24 @@ export default function SettingsScreen() {
           </Section>
 
           <Section title="Appearance">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Dark Mode</span>
-              <motion.button
-                onClick={toggle}
-                className={`w-12 h-6 rounded-full transition-colors relative ${theme === 'dark' ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
-              >
-                <motion.div
-                  animate={{ x: theme === 'dark' ? 24 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  className="absolute top-1 w-4 h-4 rounded-full bg-black"
-                />
-              </motion.button>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm">Theme</span>
+              <div className="flex gap-2">
+                {(['light', 'dark', 'system'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setThemeSetting(s)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors capitalize ${
+                      themeSetting === s ? 'bg-primary text-black border-primary' : 'border-[var(--color-border)]'
+                    }`}
+                  >
+                    {s === 'system' ? 'Auto' : s}
+                  </button>
+                ))}
+              </div>
+              {themeSetting === 'system' && (
+                <p className="text-[10px] opacity-40">Following OS: {theme} mode</p>
+              )}
             </div>
           </Section>
 

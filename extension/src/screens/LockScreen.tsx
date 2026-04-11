@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import { useWallet } from '../context/WalletContext'
 import BlobShape from '../components/animations/BlobShape'
+import { getLocal, setLocal } from '../lib/storage'
+
+const MAX_ATTEMPTS = 10
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000
 
 function CuteCreature({ isTyping }: { isTyping: boolean }) {
   return (
@@ -91,18 +95,51 @@ export default function LockScreen() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [forgotError, setForgotError] = useState('')
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(0)
 
+  const isLocked = lockoutSecondsLeft > 0
   const isTyping = password.length > 0
 
+  useEffect(() => {
+    getLocal('lockoutUntil').then(until => {
+      if (until && until > Date.now()) {
+        setLockoutSecondsLeft(Math.ceil((until - Date.now()) / 1000))
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isLocked) return
+    const id = setInterval(() => {
+      setLockoutSecondsLeft(s => {
+        if (s <= 1) { clearInterval(id); return 0 }
+        return s - 1
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [isLocked])
+
   async function handleUnlock() {
-    if (!password) return
+    if (!password || isLocked) return
     setIsLoading(true)
     setError('')
     try {
       await unlock(password)
+      await setLocal('failedLoginAttempts', 0)
+      await setLocal('lockoutUntil', 0)
       navigate('/home')
     } catch {
-      setError('Incorrect password')
+      const prev = (await getLocal('failedLoginAttempts')) ?? 0
+      const next = prev + 1
+      await setLocal('failedLoginAttempts', next)
+      if (next >= MAX_ATTEMPTS) {
+        const until = Date.now() + LOCKOUT_DURATION_MS
+        await setLocal('lockoutUntil', until)
+        setLockoutSecondsLeft(Math.ceil(LOCKOUT_DURATION_MS / 1000))
+        setError('')
+      } else {
+        setError(`Incorrect password (${next}/${MAX_ATTEMPTS} attempts)`)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -148,19 +185,28 @@ export default function LockScreen() {
               <p className="text-xs opacity-40 mt-1">Enter password to unlock</p>
             </div>
 
-            <div className="w-full">
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError('') }}
-                error={error}
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && handleUnlock()}
-              />
-            </div>
+            {isLocked ? (
+              <div className="w-full rounded-2xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-center">
+                <p className="text-xs text-red-400 font-medium">Too many failed attempts</p>
+                <p className="text-xs text-red-400/70 mt-1">
+                  Try again in {Math.floor(lockoutSecondsLeft / 60)}:{String(lockoutSecondsLeft % 60).padStart(2, '0')}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full">
+                <Input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  error={error}
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+                />
+              </div>
+            )}
 
-            <Button fullWidth isLoading={isLoading} onClick={handleUnlock}>
+            <Button fullWidth isLoading={isLoading} onClick={handleUnlock} disabled={isLocked}>
               Unlock
             </Button>
 

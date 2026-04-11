@@ -4,4 +4,6 @@ export interface Contact {
   address: string
   note?: string
   createdAt: string
+  lastInteractionAt?: string
+  sentCount?: number
 }

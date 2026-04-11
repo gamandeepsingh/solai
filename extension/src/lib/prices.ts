@@ -38,6 +38,63 @@ export async function convertUsdToToken(usdAmount: number, token: 'SOL' | 'USDC'
   return usdAmount / price
 }
 
+// Top Solana-ecosystem tokens by market cap (CoinGecko IDs)
+export const TOP_SOLANA_COINGECKO_IDS = [
+  'solana', 'usd-coin', 'tether', 'bonk', 'jito-governance-token',
+  'raydium', 'orca', 'jupiter-exchange-solana', 'pyth-network',
+  'helium', 'stepn', 'samo', 'cope', 'serum',
+]
+
+export interface MarketToken {
+  id: string
+  symbol: string
+  name: string
+  image: string
+  price: number
+  change24h: number
+  marketCap: number
+  volume24h: number
+  sparkline: number[]
+}
+
+export async function getTopTokenMarkets(ids: string[] = TOP_SOLANA_COINGECKO_IDS): Promise<MarketToken[]> {
+  const res = await fetch(cgUrl('/coins/markets', {
+    vs_currency: 'usd',
+    ids: ids.join(','),
+    order: 'market_cap_desc',
+    per_page: ids.length.toString(),
+    page: '1',
+    sparkline: 'true',
+    price_change_percentage: '24h',
+  }))
+  if (!res.ok) throw new Error(`CoinGecko error ${res.status}`)
+  const data: any[] = await res.json()
+  return data.map(c => ({
+    id: c.id,
+    symbol: c.symbol.toUpperCase(),
+    name: c.name,
+    image: c.image ?? '',
+    price: c.current_price ?? 0,
+    change24h: c.price_change_percentage_24h ?? 0,
+    marketCap: c.market_cap ?? 0,
+    volume24h: c.total_volume ?? 0,
+    sparkline: c.sparkline_in_7d?.price ?? [],
+  }))
+}
+
+export async function getPriceHistory(
+  coinId: string,
+  days: number
+): Promise<{ timestamp: number; price: number }[]> {
+  const res = await fetch(cgUrl(`/coins/${coinId}/market_chart`, {
+    vs_currency: 'usd',
+    days: days.toString(),
+  }))
+  if (!res.ok) throw new Error(`CoinGecko error ${res.status}`)
+  const data = await res.json()
+  return (data.prices as [number, number][]).map(([timestamp, price]) => ({ timestamp, price }))
+}
+
 export async function getMarketData(coinId: string): Promise<{
   price: number
   change24h: number

@@ -19,7 +19,7 @@ const AI_PLACEHOLDERS = [
 ]
 
 export default function HomeScreen() {
-  const { balances, isLoading } = useBalance()
+  const { ownedBalances, allTokenBalances, isLoading } = useBalance()
   const navigate = useNavigate()
   const [aiInput, setAiInput] = useState('')
   const [phIdx, setPhIdx] = useState(0)
@@ -43,10 +43,10 @@ export default function HomeScreen() {
       <div className="relative z-10 flex flex-col h-full">
         <Header />
         <div className="flex-1 flex flex-col gap-4 overflow-hidden pb-16">
-          <BalanceCard balances={balances} isLoading={isLoading} />
+          <BalanceCard balances={ownedBalances} isLoading={isLoading} />
           <ActionButtons />
           <div className="flex-1 overflow-y-auto px-0">
-            <TokenList balances={balances} />
+            <TokenList ownedBalances={ownedBalances} allTokenBalances={allTokenBalances} />
           </div>
         </div>
         <div className="absolute bottom-16 left-0 right-0 px-4 pb-2 z-20">
