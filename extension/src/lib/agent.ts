@@ -338,10 +338,7 @@ Never ask for private keys or seed phrases.`
       return {
         kind: 'balance',
         params: {
-          solBalance: ctx.solBalance,
-          usdcBalance: ctx.usdcBalance,
-          usdtBalance: ctx.usdtBalance,
-          solUsdValue: ctx.solUsdValue,
+          allBalances: ctx.allBalances.filter(b => b.amount > 0),
           totalUsdValue: ctx.totalUsdValue,
         },
       }
