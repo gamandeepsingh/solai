@@ -23,6 +23,7 @@ type LocalData = {
   tokenMetadataCache: Record<string, import('../types/tokens').TokenMeta>
   customNFTs: NFTAsset[]
   cachedSplBalances: Record<string, number>
+  approvedOrigins: { origin: string; connectedAt: string }[]
 }
 
 type SyncData = {

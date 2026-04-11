@@ -22,6 +22,11 @@ import LockScreen from '../screens/LockScreen'
 import NFTsScreen from '../screens/NFTs'
 import TokenDetailScreen from '../screens/TokenDetail'
 import ExploreScreen from '../screens/Explore'
+import DAppApprovalScreen from '../screens/DAppApproval'
+import ConnectedAppsScreen from '../screens/ConnectedApps'
+
+// Detect whether this popup was opened for a dApp connection request
+const isDAppApproval = new URLSearchParams(window.location.search).get('page') === 'dapp-approval'
 
 function AppRoutes() {
   const { init, isLoading, isLocked, account } = useWallet()
@@ -51,12 +56,21 @@ function AppRoutes() {
     )
   }
 
+  // When locked, always show the lock screen.
+  // After unlock isLocked becomes false and we re-render — isDAppApproval
+  // (derived from window.location.search) is still true so we fall through
+  // to DAppApprovalScreen below instead of the normal routes.
   if (isLocked) {
     return (
       <Routes>
         <Route path="*" element={<LockScreen />} />
       </Routes>
     )
+  }
+
+  // Approval popup opened by service worker: skip the normal wallet UI
+  if (isDAppApproval) {
+    return <DAppApprovalScreen />
   }
 
   return (
@@ -75,6 +89,7 @@ function AppRoutes() {
       <Route path="/token" element={<TokenDetailScreen />} />
       <Route path="/explore" element={<ExploreScreen />} />
       <Route path="/about" element={<AboutScreen />} />
+      <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )

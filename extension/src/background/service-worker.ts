@@ -246,7 +246,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 })
 
-const pendingConnectRequests: Map<string, (response: any) => void> = new Map()
+const pendingConnectRequests: Map<string, { resolve: (r: any) => void; origin: string }> = new Map()
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false
@@ -258,23 +258,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === 'SOLAI_CONNECT') {
     const { requestId, params } = message
-    pendingConnectRequests.set(requestId, sendResponse)
-    chrome.windows.create({
-      url: `src/popup/index.html?page=dapp-approval&requestId=${requestId}&origin=${encodeURIComponent(params.origin)}`,
-      type: 'popup',
-      width: 360,
-      height: 600,
-    })
+
+    ;(async () => {
+      // If this origin was previously approved, return the public key silently
+      const approvedOrigins = (await getLocal('approvedOrigins')) ?? []
+      if (approvedOrigins.some(a => a.origin === params.origin)) {
+        const [wallets, activeId, legacyKs] = await Promise.all([
+          getLocal('wallets'), getLocal('activeWalletId'), getLocal('keystore'),
+        ])
+        const wallet = wallets?.find(w => w.id === activeId) ?? wallets?.[0]
+        const pk = wallet?.keystore.publicKey ?? legacyKs?.publicKey
+        if (pk) { sendResponse({ publicKey: pk }); return }
+      }
+
+      // First-time connection — open centered approval popup
+      pendingConnectRequests.set(requestId, { resolve: sendResponse, origin: params.origin })
+      const W = 360, H = 600
+      let left: number | undefined, top: number | undefined
+      try {
+        const focused = await chrome.windows.getLastFocused({ populate: false })
+        left = Math.round((focused.left ?? 0) + ((focused.width ?? 1280) - W) / 2)
+        top  = Math.round((focused.top  ?? 0) + ((focused.height ?? 800) - H) / 2)
+      } catch {}
+      chrome.windows.create({
+        url: `src/popup/index.html?page=dapp-approval&requestId=${requestId}&origin=${encodeURIComponent(params.origin)}`,
+        type: 'popup',
+        width: W,
+        height: H,
+        ...(left !== undefined && { left, top }),
+      })
+    })()
+
     return true
   }
 
   if (message?.type === 'SOLAI_CONNECT_RESPONSE') {
     const { requestId, approved, publicKey } = message
-    const resolve = pendingConnectRequests.get(requestId)
-    if (resolve) {
+    const pending = pendingConnectRequests.get(requestId)
+    if (pending) {
       pendingConnectRequests.delete(requestId)
-      if (approved) resolve({ publicKey })
-      else resolve(null)
+      if (approved) {
+        pending.resolve({ publicKey })
+        // Persist approval so future page loads reconnect silently
+        ;(async () => {
+          const origins = (await getLocal('approvedOrigins')) ?? []
+          if (!origins.some(a => a.origin === pending.origin)) {
+            origins.push({ origin: pending.origin, connectedAt: new Date().toISOString() })
+            await setLocal('approvedOrigins', origins)
+          }
+        })()
+      } else {
+        pending.resolve(null)
+      }
     }
     return false
   }

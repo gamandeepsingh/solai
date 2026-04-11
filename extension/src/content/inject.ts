@@ -97,23 +97,59 @@ const solaiProvider = {
   },
 }
 
-Object.defineProperty(window, 'solana', {
-  value: solaiProvider,
-  writable: false,
-  configurable: false,
-})
+// Only claim window.solana if no other wallet has already locked it.
+// If Phantom (or another wallet) already defined it as non-configurable,
+// Object.defineProperty throws — we catch it and continue so the Wallet
+// Standard registration below still runs (that's what wallet-adapter uses).
+try {
+  if (!('solana' in window)) {
+    Object.defineProperty(window, 'solana', {
+      value: solaiProvider,
+      writable: false,
+      configurable: false,
+    })
+  }
+} catch {
+  // Another extension already claimed window.solana — that's fine,
+  // SOLAI will still appear via the Wallet Standard protocol.
+}
 
 // ─── Wallet Standard announcement protocol ──────────────────────────────────
 // This makes SOLAI appear in dApp wallet selectors alongside Phantom & Solflare
 
-const SOLAI_ICON = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="24" fill="#0f0f0f"/><circle cx="64" cy="52" r="28" fill="#ABFF7A" opacity="0.15"/><text x="64" y="80" font-size="56" text-anchor="middle" fill="#ABFF7A">⬡</text></svg>`)
+const FALLBACK_ICON = 'data:image/svg+xml;base64,' + btoa(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">' +
+  '<rect width="128" height="128" rx="24" fill="#0f0f0f"/>' +
+  '<circle cx="64" cy="64" r="38" fill="none" stroke="#ABFF7A" stroke-width="7"/>' +
+  '<text x="64" y="79" font-size="46" font-weight="bold" text-anchor="middle" fill="#ABFF7A" font-family="Arial,sans-serif">S</text>' +
+  '</svg>'
+)
+
+let _iconDataUrl: string = FALLBACK_ICON
+
+// Fetch the real PNG from the extension bundle and convert to a data URI.
+// web_accessible_resources allows pages to fetch chrome-extension:// URLs.
+;(async () => {
+  try {
+    const url = (globalThis as any).chrome?.runtime?.getURL('icons/icon128.png')
+    if (!url) return
+    const res = await fetch(url)
+    const blob = await res.blob()
+    _iconDataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch { /* keep fallback */ }
+})()
 
 const walletStandardAccounts: any[] = []
 
 const walletStandardObject = {
   version: '1.0.0' as const,
   name: 'SOLAI',
-  icon: SOLAI_ICON,
+  get icon() { return _iconDataUrl },
   chains: ['solana:mainnet', 'solana:devnet'],
   features: {
     'standard:connect': {
@@ -130,7 +166,7 @@ const walletStandardObject = {
           address: _publicKey!,
           publicKey: bs58Decode(_publicKey!).buffer,
           chains: ['solana:mainnet', 'solana:devnet'],
-          features: ['standard:connect', 'standard:disconnect', 'solana:signAndSendTransaction', 'solana:signMessage'],
+          features: ['standard:connect', 'standard:disconnect', 'standard:events', 'solana:signAndSendTransaction', 'solana:signTransaction', 'solana:signMessage'],
         }
         walletStandardAccounts.length = 0
         walletStandardAccounts.push(account)
@@ -165,6 +201,7 @@ const walletStandardObject = {
     },
     'solana:signAndSendTransaction': {
       version: '1.0.0',
+      supportedTransactionVersions: new Set(['legacy', 0]) as ReadonlySet<'legacy' | 0>,
       async signAndSendTransaction(input: { transaction: Uint8Array; account: any; chain: string; options?: any }) {
         const result = await sendRequest('signAndSendTransaction', {
           transaction: Array.from(input.transaction),
@@ -172,6 +209,17 @@ const walletStandardObject = {
           options: input.options,
         })
         return [{ signature: result.signature }]
+      },
+    },
+    'solana:signTransaction': {
+      version: '1.0.0',
+      supportedTransactionVersions: new Set(['legacy', 0]) as ReadonlySet<'legacy' | 0>,
+      async signTransaction(input: { transaction: Uint8Array; account: any; chain: string }) {
+        const result = await sendRequest('signTransaction', {
+          transaction: Array.from(input.transaction),
+          chain: input.chain,
+        })
+        return [{ signedTransaction: new Uint8Array(result.signedTransaction) }]
       },
     },
   },
@@ -194,6 +242,6 @@ window.dispatchEvent(new CustomEvent('wallet-standard:register-wallet', {
 
 // Tell dApps that load after SOLAI
 window.addEventListener('wallet-standard:app-ready', (event: Event) => {
-  const e = event as CustomEvent<{ register: typeof registerWithApp }>
+  const e = event as CustomEvent<{ register: (wallet: typeof walletStandardObject) => void }>
   try { e.detail.register(walletStandardObject) } catch {}
 })
