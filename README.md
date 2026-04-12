@@ -62,7 +62,12 @@ The easiest way to try SOLAI — no Node.js or build tools needed.
 
 SOLAI will appear in your extensions bar. Pin it for quick access.
 
+## 📦 Install without building (Non- Developer Mode)
+
+Chrome Store: [link](https://chromewebstore.google.com/detail/solai-wallet/lfclbffajamcijjdpaomclldjpdgopej)
+
 > Works on Chrome, Brave, Arc, and any Chromium-based browser.
+
 
 ---
 
