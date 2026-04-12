@@ -82,6 +82,27 @@ export async function getTopTokenMarkets(ids: string[] = TOP_SOLANA_COINGECKO_ID
   }))
 }
 
+export interface TrendingCoin {
+  id: string
+  symbol: string
+  name: string
+  image: string
+  marketCapRank: number
+}
+
+export async function getTrendingCoins(): Promise<TrendingCoin[]> {
+  const res = await fetch(cgUrl('/search/trending'))
+  if (!res.ok) throw new Error(`CoinGecko error ${res.status}`)
+  const data = await res.json()
+  return (data.coins as any[]).map(({ item }) => ({
+    id: item.id,
+    symbol: (item.symbol as string).toUpperCase(),
+    name: item.name,
+    image: item.small ?? '',
+    marketCapRank: item.market_cap_rank ?? 0,
+  }))
+}
+
 export async function getPriceHistory(
   coinId: string,
   days: number

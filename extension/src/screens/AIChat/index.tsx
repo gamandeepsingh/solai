@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAI } from '../../context/AIContext'
 import { useWallet } from '../../context/WalletContext'
-import { getSync } from '../../lib/storage'
+import { getLocal } from '../../lib/storage'
 import BottomNav from '../../components/layout/BottomNav'
 import Spinner from '../../components/ui/Spinner'
 import ActionCard from '../../components/chat/ActionCard'
@@ -35,7 +35,7 @@ export default function AIChatScreen() {
   }, [])
 
   useEffect(() => {
-    getSync('openrouterApiKey').then(k => setHasKey(!!k))
+    getLocal('openrouterApiKey').then(k => setHasKey(!!k))
   }, [])
 
   useEffect(() => {
