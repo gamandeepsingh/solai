@@ -24,8 +24,8 @@ async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
   if (!ws || ws.expiresAt <= Date.now()) return null
   // New multi-wallet format: { keypairs: Record<id, number[]>, expiresAt }
   if (ws.keypairs) {
-    const { activeWalletId } = await chrome.storage.local.get('activeWalletId') as any
-    const sk = ws.keypairs[activeWalletId]
+    const activeWalletId = await getLocal('activeWalletId')
+    const sk = ws.keypairs[activeWalletId!]
     if (!sk) return null
     return nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
   }
@@ -248,6 +248,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 const pendingConnectRequests: Map<string, { resolve: (r: any) => void; origin: string }> = new Map()
 
+async function openSignApprovalPopup(requestId: string) {
+  const W = 360, H = 600
+  let left: number | undefined, top: number | undefined
+  try {
+    const focused = await chrome.windows.getLastFocused({ populate: false })
+    left = Math.round((focused.left ?? 0) + ((focused.width ?? 1280) - W) / 2)
+    top  = Math.round((focused.top  ?? 0) + ((focused.height ?? 800) - H) / 2)
+  } catch {}
+  chrome.windows.create({
+    url: `src/popup/index.html?page=sign-approval&requestId=${requestId}`,
+    type: 'popup',
+    width: W,
+    height: H,
+    ...(left !== undefined && { left, top }),
+  })
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false
 
@@ -299,7 +316,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingConnectRequests.delete(requestId)
       if (approved) {
         pending.resolve({ publicKey })
-        // Persist approval so future page loads reconnect silently
         ;(async () => {
           const origins = (await getLocal('approvedOrigins')) ?? []
           if (!origins.some(a => a.origin === pending.origin)) {
@@ -311,6 +327,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         pending.resolve(null)
       }
     }
+    return false
+  }
+
+  if (
+    message?.type === 'SOLAI_SIGNMESSAGE' ||
+    message?.type === 'SOLAI_SIGNTRANSACTION' ||
+    message?.type === 'SOLAI_SIGNANDSENDTRANSACTION'
+  ) {
+    const typeMap: Record<string, string> = {
+      SOLAI_SIGNMESSAGE: 'signMessage',
+      SOLAI_SIGNTRANSACTION: 'signTransaction',
+      SOLAI_SIGNANDSENDTRANSACTION: 'signAndSendTransaction',
+    }
+    const requestId: string = message.requestId ?? Math.random().toString(36).slice(2)
+    const tabId: number | undefined = sender.tab?.id
+
+    ;(async () => {
+      // Always show the sign approval popup — never auto-sign.
+      // The popup handles unlock (if locked) and user confirmation before signing.
+      await chrome.storage.session.set({
+        [`pendingSign_${requestId}`]: { type: typeMap[message.type], params: message.params, tabId },
+      })
+      await openSignApprovalPopup(requestId)
+      sendResponse({ queued: true, requestId })
+    })()
+    return true
+  }
+
+  if (message?.type === 'SOLAI_DISCONNECT') {
+    sendResponse({})
     return false
   }
 

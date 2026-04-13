@@ -29,7 +29,8 @@
     "alarms",
     "clipboardWrite",
     "notifications",
-    "windows"
+    "windows",
+    "tabs"
   ],
   "host_permissions": [
     "https://api.mainnet-beta.solana.com/*",

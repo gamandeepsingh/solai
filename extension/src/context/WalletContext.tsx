@@ -2,10 +2,19 @@ import { createContext, useContext, useState, useCallback, useRef, useMemo, type
 import nacl from 'tweetnacl'
 import bs58 from 'bs58'
 import type { WalletAccount, WalletEntry, Network } from '../types/wallet'
-import { getLocal, setLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
+import { getLocal, setLocal, removeLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
 import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair, getMnemonicFromKeystore, validateMnemonic } from '../lib/wallet'
+import { getSolBalance, sendSol } from '../lib/solana'
 
 const SESSION_TTL = 30 * 60 * 1000
+const COLLECT_FEE_RESERVE = 0.000005
+
+export interface StealthAddress {
+  walletId: string
+  index: number
+  publicKey: string
+  label: string
+}
 
 interface AddWalletParams {
   method: 'create' | 'import'
@@ -22,18 +31,23 @@ interface WalletContextValue {
   network: Network
   isLocked: boolean
   isLoading: boolean
+  stealthAddresses: StealthAddress[]
   createWallet: (password: string) => Promise<string>
   importWallet: (mnemonic: string, password: string) => Promise<void>
   addWallet: (params: AddWalletParams) => Promise<string>
   switchWallet: (id: string) => Promise<void>
   renameWallet: (id: string, name: string) => Promise<void>
   removeWallet: (id: string) => Promise<void>
+  resetAllWallets: (password: string) => Promise<void>
   unlock: (password: string) => Promise<void>
   lock: () => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   changePasswordFromMnemonic: (mnemonic: string, newPassword: string) => Promise<void>
   setNetwork: (n: Network) => void
   init: () => Promise<{ hasWallet: boolean }>
+  generateStealthAddress: (password: string, label: string) => Promise<string>
+  collectFromStealth: (stealthPublicKey: string, password: string) => Promise<string>
+  deleteStealthAddress: (stealthPublicKey: string) => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue>(null!)
@@ -53,6 +67,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [network, setNetworkState] = useState<Network>('mainnet')
   const [isLocked, setIsLocked] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
+  const [stealthAddresses, setStealthAddresses] = useState<StealthAddress[]>([])
   const keypairsMapRef = useRef<Record<string, nacl.SignKeyPair>>({})
 
   const account = useMemo<WalletAccount | null>(() => {
@@ -116,6 +131,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } else {
       setIsLocked(true)
     }
+
+    const savedStealth = await getLocal('stealthAddresses')
+    if (savedStealth) setStealthAddresses(savedStealth)
 
     setIsLoading(false)
     return { hasWallet: true }
@@ -209,6 +227,62 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAccounts(updated)
   }, [])
 
+  const resetAllWallets = useCallback(async (password: string): Promise<void> => {
+    const wallets = await getLocal('wallets') ?? []
+    if (!wallets.length) throw new Error('No wallet found')
+    await unlockKeystore(wallets[0].keystore, password)
+    await removeLocal('wallets')
+    await removeLocal('activeWalletId')
+    await removeSession('walletSession')
+    keypairsMapRef.current = {}
+    setAccounts([])
+    setActiveId(null)
+    setKeypair(null)
+    setStealthAddresses([])
+    setIsLocked(true)
+  }, [])
+
+  const generateStealthAddress = useCallback(async (password: string, label: string): Promise<string> => {
+    const wallets = await getLocal('wallets') ?? []
+    if (!wallets.length) throw new Error('No wallet found')
+    const currentActiveId = await getLocal('activeWalletId')
+    const activeEntry = wallets.find(w => w.id === currentActiveId) ?? wallets[0]
+    const mnemonic = await getMnemonicFromKeystore(activeEntry.keystore, password)
+    const existing = (await getLocal('stealthAddresses') ?? []).filter(s => s.walletId === activeEntry.id)
+    const nextIndex = existing.length > 0 ? Math.max(...existing.map(s => s.index)) + 1 : 1
+    const kp = await mnemonicToKeypair(mnemonic, nextIndex)
+    const publicKey = bs58.encode(kp.publicKey)
+    const newEntry: StealthAddress = { walletId: activeEntry.id, index: nextIndex, publicKey, label }
+    const allStealth = await getLocal('stealthAddresses') ?? []
+    const updated = [...allStealth, newEntry]
+    await setLocal('stealthAddresses', updated)
+    setStealthAddresses(updated)
+    return publicKey
+  }, [])
+
+  const deleteStealthAddress = useCallback(async (stealthPublicKey: string): Promise<void> => {
+    const allStealth = await getLocal('stealthAddresses') ?? []
+    const updated = allStealth.filter(s => s.publicKey !== stealthPublicKey)
+    await setLocal('stealthAddresses', updated)
+    setStealthAddresses(updated)
+  }, [])
+
+  const collectFromStealth = useCallback(async (stealthPublicKey: string, password: string): Promise<string> => {
+    const allStealth = await getLocal('stealthAddresses') ?? []
+    const entry = allStealth.find(s => s.publicKey === stealthPublicKey)
+    if (!entry) throw new Error('Stealth address not found')
+    const wallets = await getLocal('wallets') ?? []
+    const walletEntry = wallets.find(w => w.id === entry.walletId)
+    if (!walletEntry) throw new Error('Wallet not found')
+    const mnemonic = await getMnemonicFromKeystore(walletEntry.keystore, password)
+    const stealthKp = await mnemonicToKeypair(mnemonic, entry.index)
+    const balance = await getSolBalance(stealthPublicKey, network)
+    const sendable = balance - COLLECT_FEE_RESERVE
+    if (sendable <= 0) throw new Error('Insufficient balance in stealth address')
+    const mainPublicKey = walletEntry.keystore.publicKey
+    return sendSol(stealthKp, mainPublicKey, sendable, network)
+  }, [network])
+
   const unlock = useCallback(async (password: string): Promise<void> => {
     const wallets = await getLocal('wallets') ?? []
     if (!wallets.length) throw new Error('No wallet found')
@@ -269,8 +343,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   return (
     <WalletContext.Provider value={{
       accounts, account, activeId, keypair, network, isLocked, isLoading,
+      stealthAddresses,
       createWallet, importWallet, addWallet, switchWallet, renameWallet, removeWallet,
+      resetAllWallets,
       unlock, lock, changePassword, changePasswordFromMnemonic, setNetwork, init,
+      generateStealthAddress, collectFromStealth, deleteStealthAddress,
     }}>
       {children}
     </WalletContext.Provider>

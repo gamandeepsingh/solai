@@ -83,7 +83,7 @@ function CuteCreature({ isTyping }: { isTyping: boolean }) {
   )
 }
 
-export default function LockScreen() {
+export default function LockScreen({ signMode }: { signMode?: boolean }) {
   const { unlock, changePasswordFromMnemonic, account } = useWallet()
   const navigate = useNavigate()
 
@@ -127,7 +127,7 @@ export default function LockScreen() {
       await unlock(password)
       await setLocal('failedLoginAttempts', 0)
       await setLocal('lockoutUntil', 0)
-      navigate('/home')
+      if (!signMode) navigate('/home')
     } catch {
       const prev = (await getLocal('failedLoginAttempts')) ?? 0
       const next = prev + 1
@@ -182,7 +182,7 @@ export default function LockScreen() {
               <h2 className="font-semibold text-lg tracking-tight">
                 {account?.name ?? 'SOLAI'}
               </h2>
-              <p className="text-xs opacity-40 mt-1">Enter password to unlock</p>
+              <p className="text-xs opacity-40 mt-1">{signMode ? 'Unlock to complete the request' : 'Enter password to unlock'}</p>
             </div>
 
             {isLocked ? (

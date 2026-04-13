@@ -17,7 +17,7 @@ const NETWORKS: Network[] = ['mainnet', 'devnet']
 
 export default function SettingsScreen() {
   const navigate = useNavigate()
-  const { account, network, setNetwork, lock, changePassword } = useWallet()
+  const { account, network, setNetwork, lock, changePassword, resetAllWallets } = useWallet()
   const { theme, themeSetting, setThemeSetting } = useTheme()
   const [apiKey, setApiKey] = useState('')
   const [savedKey, setSavedKey] = useState('')
@@ -32,6 +32,10 @@ export default function SettingsScreen() {
   const [confirmPw, setConfirmPw] = useState('')
   const [changePwError, setChangePwError] = useState('')
   const [isChangingPw, setIsChangingPw] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [isResetting, setIsResetting] = useState(false)
 
   async function handleChangePassword() {
     setChangePwError('')
@@ -53,6 +57,18 @@ export default function SettingsScreen() {
   useEffect(() => {
     getLocal('openrouterApiKey').then(k => { if (k) { setSavedKey(k); setApiKey(k) } })
   }, [])
+
+  async function handleReset() {
+    if (!resetPassword) return setResetError('Enter your password')
+    setIsResetting(true)
+    setResetError('')
+    try {
+      await resetAllWallets(resetPassword)
+    } catch (e: any) {
+      setResetError(e.message?.includes('Incorrect') || e.message?.includes('decrypt') ? 'Incorrect password' : (e.message ?? 'Failed'))
+      setIsResetting(false)
+    }
+  }
 
   async function saveApiKey() {
     setIsSavingKey(true)
@@ -143,6 +159,9 @@ export default function SettingsScreen() {
               <Button variant="danger" size="sm" fullWidth onClick={lock}>
                 Lock Wallet
               </Button>
+              <Button variant="danger" size="sm" fullWidth onClick={() => { setShowResetModal(true); setResetPassword(''); setResetError('') }}>
+                Reset Wallet
+              </Button>
             </div>
           </Section>
 
@@ -220,6 +239,21 @@ export default function SettingsScreen() {
           </div>
         )}
       </Modal>
+      <Modal open={showResetModal} onClose={() => !isResetting && setShowResetModal(false)} title="Reset Wallet">
+        <div className="flex flex-col gap-3">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-3">
+            <div className="flex items-center gap-1.5">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red-400 shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <p className="text-xs text-red-400">This will delete all wallets from this device. Make sure you have your seed phrases saved.</p>
+            </div>
+          </div>
+          <Input type="password" label="Confirm with password" placeholder="Enter your password" value={resetPassword} onChange={e => { setResetPassword(e.target.value); setResetError('') }} error={resetError} />
+          <Button fullWidth isLoading={isResetting} onClick={handleReset} className="bg-red-500 hover:bg-red-600 text-white">
+            Reset All Wallets
+          </Button>
+        </div>
+      </Modal>
+
       <Modal open={showChangePw} onClose={() => setShowChangePw(false)} title="Change Password">
         <div className="flex flex-col gap-3">
           <Input type="password" label="Current password" placeholder="Current password" value={currentPw} onChange={e => { setCurrentPw(e.target.value); setChangePwError('') }} />

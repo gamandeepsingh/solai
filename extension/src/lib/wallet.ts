@@ -5,7 +5,9 @@ import bs58 from 'bs58'
 import { encrypt, decrypt } from './crypto'
 import type { EncryptedKeystore } from '../types/wallet'
 
-const DERIVATION_PATH = "m/44'/501'/0'/0'"
+function derivationPath(accountIndex = 0) {
+  return `m/44'/501'/${accountIndex}'/0'`
+}
 
 export function generateMnemonic(): string {
   return bip39.generateMnemonic(128)
@@ -19,9 +21,9 @@ function toHex(buf: Uint8Array): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-export async function mnemonicToKeypair(mnemonic: string): Promise<nacl.SignKeyPair> {
+export async function mnemonicToKeypair(mnemonic: string, accountIndex = 0): Promise<nacl.SignKeyPair> {
   const seed = await bip39.mnemonicToSeed(mnemonic)
-  const derived = derivePath(DERIVATION_PATH, toHex(new Uint8Array(seed)))
+  const derived = derivePath(derivationPath(accountIndex), toHex(new Uint8Array(seed)))
   return nacl.sign.keyPair.fromSeed(derived.key)
 }
 

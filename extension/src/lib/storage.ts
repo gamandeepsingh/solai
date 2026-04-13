@@ -24,6 +24,7 @@ type LocalData = {
   customNFTs: NFTAsset[]
   cachedSplBalances: Record<string, number>
   approvedOrigins: { origin: string; connectedAt: string }[]
+  stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
 }
 
 type SyncData = {
