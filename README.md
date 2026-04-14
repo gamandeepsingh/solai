@@ -1,6 +1,6 @@
 # SOLAI Wallet
 
-![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.0.6-blue) ![Platform](https://img.shields.io/badge/platform-Chrome%20Extension-yellow)
+![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.0.7-blue) ![Platform](https://img.shields.io/badge/platform-Chrome%20Extension-yellow)
 
 AI-first, non-custodial Solana wallet built as a Chrome Extension. Clean UI, real on-chain actions, and programmable agent wallets for automated payments.
 
@@ -60,7 +60,7 @@ AI-first, non-custodial Solana wallet built as a Chrome Extension. Clean UI, rea
 **Chrome Web Store:** [SOLAI Wallet](https://chromewebstore.google.com/detail/solai-wallet/lfclbffajamcijjdpaomclldjpdgopej)
 
 **Manual (Developer Mode):**
-1. Download the latest `v1.0.6.zip` from [Releases](../../releases)
+1. Download the latest `v1.0.7.zip` from [Releases](../../releases)
 2. Unzip — you'll get a `dist/` folder
 3. Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select `dist/`
 
