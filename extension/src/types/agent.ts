@@ -60,4 +60,29 @@ export interface ScheduledJob {
   createdAt: number
 }
 
+export interface AgentGuardrails {
+  dailyBudgetSol: number
+  perTxLimitSol: number
+  allowedOrigins: string[]
+  cooldownMs: number
+}
+
+export interface AgentStats {
+  totalSpentSol: number
+  dailySpentSol: number
+  dailyResetAt: number
+  lastPaymentAt: number
+  txCount: number
+}
+
+export interface AgentWallet {
+  id: string
+  walletId: string
+  index: number
+  publicKey: string
+  name: string
+  enabled: boolean
+  guardrails: AgentGuardrails
+  stats: AgentStats
+}
 

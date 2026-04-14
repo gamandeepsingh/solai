@@ -1,6 +1,6 @@
 import type { EncryptedKeystore, Network, WalletEntry } from '../types/wallet'
 import type { Contact } from '../types/contacts'
-import type { ScheduledJob } from '../types/agent'
+import type { ScheduledJob, AgentWallet } from '../types/agent'
 import type { ConditionalOrder } from '../types/orders'
 import type { TxRecord } from '../types/history'
 import type { NFTAsset } from '../types/nft'
@@ -25,6 +25,7 @@ type LocalData = {
   cachedSplBalances: Record<string, number>
   approvedOrigins: { origin: string; connectedAt: string }[]
   stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
+  agentWallets: AgentWallet[]
 }
 
 type SyncData = {
@@ -69,6 +70,7 @@ export async function setSync<K extends keyof SyncData>(key: K, value: SyncData[
 
 type SessionData = {
   walletSession: { keypairs: Record<string, number[]>; expiresAt: number }
+  agentSession: { keypairs: Record<string, number[]>; expiresAt: number }
   chatSession: { messages: unknown[]; expiresAt: number }
 }
 

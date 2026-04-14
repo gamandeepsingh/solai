@@ -124,6 +124,18 @@ const solaiProvider = {
   },
 }
 
+// ─── Agent wallet API ────────────────────────────────────────────────────────
+
+const solaiAgentApi = {
+  pay(params: { agentId: string; recipient: string; amountSol: number; memo?: string }): Promise<{ signature: string }> {
+    return sendRequest('AGENT_PAY', params)
+  },
+}
+
+try {
+  Object.defineProperty(window, 'solaiAgent', { value: Object.freeze(solaiAgentApi), writable: false, configurable: false })
+} catch {}
+
 // Only claim window.solana if no other wallet has already locked it.
 // If Phantom (or another wallet) already defined it as non-configurable,
 // Object.defineProperty throws — we catch it and continue so the Wallet

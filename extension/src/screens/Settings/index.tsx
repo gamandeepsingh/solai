@@ -156,6 +156,9 @@ export default function SettingsScreen() {
               <Button variant="secondary" size="sm" fullWidth onClick={() => { setShowChangePw(true); setCurrentPw(''); setNewPw(''); setConfirmPw(''); setChangePwError('') }}>
                 Change Password
               </Button>
+              <Button variant="secondary" size="sm" fullWidth onClick={() => navigate('/agent-wallets')}>
+                Agent Wallets
+              </Button>
               <Button variant="danger" size="sm" fullWidth onClick={lock}>
                 Lock Wallet
               </Button>

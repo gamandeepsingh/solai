@@ -8,7 +8,7 @@ import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
 import { CURATED_TOKENS, getMintForNetwork } from '../lib/tokens'
-import type { ScheduledJob } from '../types/agent'
+import type { ScheduledJob, AgentWallet } from '../types/agent'
 import type { ConditionalOrder } from '../types/orders'
 import type { Network } from '../types/wallet'
 
@@ -17,6 +17,15 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('scheduler-tick', { periodInMinutes: 1 })
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
 })
+
+async function getAgentKeypair(agentId: string): Promise<nacl.SignKeyPair | null> {
+  const session = await chrome.storage.session.get('agentSession') as any
+  const as = session?.agentSession
+  if (!as || as.expiresAt <= Date.now()) return null
+  const sk = as.keypairs?.[agentId]
+  if (!sk) return null
+  return nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
+}
 
 async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
   const session = await chrome.storage.session.get('walletSession') as any
@@ -358,6 +367,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'SOLAI_DISCONNECT') {
     sendResponse({})
     return false
+  }
+
+  if (message?.type === 'SOLAI_AGENT_PAY') {
+    ;(async () => {
+      const { agentId, recipient, amountSol, origin } = message.params ?? {}
+      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const idx = agentWalletList.findIndex(a => a.id === agentId)
+      if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
+      const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
+      if (!agent.enabled) { sendResponse({ error: 'Agent is disabled (kill-switch active)' }); return }
+
+      const now = Date.now()
+      const todayMidnight = new Date().setHours(0, 0, 0, 0)
+      if (agent.stats.dailyResetAt < todayMidnight) {
+        agent.stats.dailySpentSol = 0
+        agent.stats.dailyResetAt = todayMidnight
+      }
+      const g = agent.guardrails
+      if (g.perTxLimitSol > 0 && amountSol > g.perTxLimitSol) {
+        sendResponse({ error: `Per-tx limit: ${g.perTxLimitSol} SOL` }); return
+      }
+      if (g.dailyBudgetSol > 0 && agent.stats.dailySpentSol + amountSol > g.dailyBudgetSol) {
+        sendResponse({ error: `Daily budget exceeded (${agent.stats.dailySpentSol.toFixed(4)}/${g.dailyBudgetSol} SOL used)` }); return
+      }
+      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => origin?.startsWith(o))) {
+        sendResponse({ error: 'Origin not in allowlist' }); return
+      }
+      if (g.cooldownMs > 0 && agent.stats.lastPaymentAt > 0 && now - agent.stats.lastPaymentAt < g.cooldownMs) {
+        const rem = Math.ceil((g.cooldownMs - (now - agent.stats.lastPaymentAt)) / 1000)
+        sendResponse({ error: `Cooldown active: ${rem}s remaining` }); return
+      }
+
+      const keypair = await getAgentKeypair(agentId)
+      if (!keypair) { sendResponse({ error: 'Session expired — unlock wallet to re-authorize agents' }); return }
+
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      try {
+        const sig = await sendSol(keypair, recipient, amountSol, network)
+        agent.stats.dailySpentSol += amountSol
+        agent.stats.totalSpentSol += amountSol
+        agent.stats.lastPaymentAt = now
+        agent.stats.txCount++
+        const updatedList = [...agentWalletList]
+        updatedList[idx] = agent
+        await setLocal('agentWallets', updatedList)
+        await logTx({ sig, type: 'send', timestamp: now, amount: amountSol, token: 'SOL', status: 'success', network, agentId })
+        sendResponse({ signature: sig })
+      } catch (e: any) {
+        sendResponse({ error: e?.message ?? 'Payment failed' })
+      }
+    })()
+    return true
   }
 
   return false

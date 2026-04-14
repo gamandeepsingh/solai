@@ -25,6 +25,7 @@ import ExploreScreen from '../screens/Explore'
 import DAppApprovalScreen from '../screens/DAppApproval'
 import ConnectedAppsScreen from '../screens/ConnectedApps'
 import SignApprovalScreen from '../screens/SignApproval'
+import AgentWalletsScreen from '../screens/AgentWallets'
 
 const _params = new URLSearchParams(window.location.search)
 const isDAppApproval = _params.get('page') === 'dapp-approval'
@@ -141,6 +142,7 @@ function AppRoutes() {
       <Route path="/explore" element={<ExploreScreen />} />
       <Route path="/about" element={<AboutScreen />} />
       <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
+      <Route path="/agent-wallets" element={<AgentWalletsScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )

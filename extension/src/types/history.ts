@@ -6,4 +6,6 @@ export interface TxRecord {
   token?: string
   toOrFrom?: string
   status: 'success' | 'error'
+  network?: string
+  agentId?: string
 }

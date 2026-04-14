@@ -5,6 +5,7 @@ import type { WalletAccount, WalletEntry, Network } from '../types/wallet'
 import { getLocal, setLocal, removeLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
 import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair, getMnemonicFromKeystore, validateMnemonic } from '../lib/wallet'
 import { getSolBalance, sendSol } from '../lib/solana'
+import type { AgentWallet, AgentGuardrails } from '../types/agent'
 
 const SESSION_TTL = 30 * 60 * 1000
 const COLLECT_FEE_RESERVE = 0.000005
@@ -48,6 +49,13 @@ interface WalletContextValue {
   generateStealthAddress: (password: string, label: string) => Promise<string>
   collectFromStealth: (stealthPublicKey: string, password: string) => Promise<string>
   deleteStealthAddress: (stealthPublicKey: string) => Promise<void>
+  agentWallets: AgentWallet[]
+  createAgentWallet: (password: string, name: string, guardrails: AgentGuardrails) => Promise<AgentWallet>
+  updateAgentGuardrails: (agentId: string, guardrails: AgentGuardrails) => Promise<void>
+  toggleAgent: (agentId: string, enabled: boolean) => Promise<void>
+  deleteAgentWallet: (agentId: string) => Promise<void>
+  fundAgent: (agentId: string, amountSol: number) => Promise<string>
+  collectFromAgent: (agentId: string, password: string) => Promise<string>
 }
 
 const WalletContext = createContext<WalletContextValue>(null!)
@@ -60,6 +68,14 @@ async function saveSession(keypairs: Record<string, nacl.SignKeyPair>) {
   await setSession('walletSession', { keypairs: serialized, expiresAt: Date.now() + SESSION_TTL })
 }
 
+async function saveAgentSession(keypairs: Record<string, nacl.SignKeyPair>) {
+  const serialized: Record<string, number[]> = {}
+  for (const [id, kp] of Object.entries(keypairs)) {
+    serialized[id] = Array.from(kp.secretKey)
+  }
+  await setSession('agentSession', { keypairs: serialized, expiresAt: Date.now() + SESSION_TTL })
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<WalletEntry[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -68,6 +84,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isLocked, setIsLocked] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [stealthAddresses, setStealthAddresses] = useState<StealthAddress[]>([])
+  const [agentWallets, setAgentWallets] = useState<AgentWallet[]>([])
   const keypairsMapRef = useRef<Record<string, nacl.SignKeyPair>>({})
 
   const account = useMemo<WalletAccount | null>(() => {
@@ -134,6 +151,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const savedStealth = await getLocal('stealthAddresses')
     if (savedStealth) setStealthAddresses(savedStealth)
+
+    const savedAgentWallets = await getLocal('agentWallets') ?? []
+    setAgentWallets(savedAgentWallets)
 
     setIsLoading(false)
     return { hasWallet: true }
@@ -299,6 +319,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const activeKp = map[savedActiveId]
     setKeypair(activeKp ?? null)
     setIsLocked(false)
+
+    const agentList = await getLocal('agentWallets') ?? []
+    const agentMap: Record<string, nacl.SignKeyPair> = {}
+    for (const agent of agentList) {
+      const walletEntry = wallets.find(w => w.id === agent.walletId)
+      if (!walletEntry) continue
+      const mnemonic = await getMnemonicFromKeystore(walletEntry.keystore, password)
+      agentMap[agent.id] = await mnemonicToKeypair(mnemonic, agent.index)
+    }
+    if (Object.keys(agentMap).length > 0) await saveAgentSession(agentMap)
+    setAgentWallets(agentList)
   }, [])
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
@@ -328,6 +359,102 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await unlock(newPassword)
   }, [unlock])
 
+  const createAgentWallet = useCallback(async (password: string, name: string, guardrails: AgentGuardrails): Promise<AgentWallet> => {
+    const wallets = await getLocal('wallets') ?? []
+    const currentActiveId = await getLocal('activeWalletId')
+    const activeEntry = wallets.find(w => w.id === currentActiveId) ?? wallets[0]
+    if (!activeEntry) throw new Error('No wallet found')
+    const mnemonic = await getMnemonicFromKeystore(activeEntry.keystore, password)
+    const allAgents = await getLocal('agentWallets') ?? []
+    const myAgents = allAgents.filter(a => a.walletId === activeEntry.id)
+    const nextIndex = myAgents.length > 0 ? Math.max(...myAgents.map(a => a.index)) + 1 : 1000
+    const kp = await mnemonicToKeypair(mnemonic, nextIndex)
+    const publicKey = (await import('bs58')).default.encode(kp.publicKey)
+    const newAgent: AgentWallet = {
+      id: crypto.randomUUID(),
+      walletId: activeEntry.id,
+      index: nextIndex,
+      publicKey,
+      name,
+      enabled: true,
+      guardrails,
+      stats: { totalSpentSol: 0, dailySpentSol: 0, dailyResetAt: 0, lastPaymentAt: 0, txCount: 0 },
+    }
+    const updated = [...allAgents, newAgent]
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+    const rawSession = await chrome.storage.session.get('agentSession') as any
+    const existing = rawSession?.agentSession
+    const existingMap: Record<string, nacl.SignKeyPair> = {}
+    if (existing?.keypairs) {
+      for (const [id, sk] of Object.entries(existing.keypairs as Record<string, number[]>)) {
+        existingMap[id] = nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
+      }
+    }
+    existingMap[newAgent.id] = kp
+    await saveAgentSession(existingMap)
+    return newAgent
+  }, [])
+
+  const updateAgentGuardrails = useCallback(async (agentId: string, guardrails: AgentGuardrails): Promise<void> => {
+    const allAgents = await getLocal('agentWallets') ?? []
+    const updated = allAgents.map(a => a.id === agentId ? { ...a, guardrails } : a)
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+  }, [])
+
+  const toggleAgent = useCallback(async (agentId: string, enabled: boolean): Promise<void> => {
+    const allAgents = await getLocal('agentWallets') ?? []
+    const updated = allAgents.map(a => a.id === agentId ? { ...a, enabled } : a)
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+  }, [])
+
+  const deleteAgentWallet = useCallback(async (agentId: string): Promise<void> => {
+    const allAgents = await getLocal('agentWallets') ?? []
+    const updated = allAgents.filter(a => a.id !== agentId)
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+    const rawSession = await chrome.storage.session.get('agentSession') as any
+    const existing = rawSession?.agentSession
+    if (existing?.keypairs) {
+      const { [agentId]: _removed, ...rest } = existing.keypairs
+      void _removed
+      await chrome.storage.session.set({ agentSession: { keypairs: rest, expiresAt: existing.expiresAt } })
+    }
+  }, [])
+
+  const fundAgent = useCallback(async (agentId: string, amountSol: number): Promise<string> => {
+    if (!keypair) throw new Error('Wallet is locked')
+    const allAgents = await getLocal('agentWallets') ?? []
+    const agent = allAgents.find(a => a.id === agentId)
+    if (!agent) throw new Error('Agent not found')
+    return sendSol(keypair, agent.publicKey, amountSol, network)
+  }, [keypair, network])
+
+  const collectFromAgent = useCallback(async (agentId: string, password: string): Promise<string> => {
+    const allAgents = await getLocal('agentWallets') ?? []
+    const agent = allAgents.find(a => a.id === agentId)
+    if (!agent) throw new Error('Agent not found')
+    const wallets = await getLocal('wallets') ?? []
+    const walletEntry = wallets.find(w => w.id === agent.walletId)
+    if (!walletEntry) throw new Error('Wallet not found')
+    const mnemonic = await getMnemonicFromKeystore(walletEntry.keystore, password)
+    const agentKp = await mnemonicToKeypair(mnemonic, agent.index)
+    const balance = await getSolBalance(agent.publicKey, network)
+    const sendable = balance - COLLECT_FEE_RESERVE
+    if (sendable <= 0) throw new Error('Insufficient balance in agent wallet')
+    const mainPublicKey = walletEntry.keystore.publicKey
+    const sig = await sendSol(agentKp, mainPublicKey, sendable, network)
+    const updated = allAgents.map(a => a.id === agentId
+      ? { ...a, stats: { ...a.stats, dailySpentSol: 0, lastPaymentAt: Date.now() } }
+      : a
+    )
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+    return sig
+  }, [network])
+
   const lock = useCallback(async () => {
     keypairsMapRef.current = {}
     setKeypair(null)
@@ -348,6 +475,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       resetAllWallets,
       unlock, lock, changePassword, changePasswordFromMnemonic, setNetwork, init,
       generateStealthAddress, collectFromStealth, deleteStealthAddress,
+      agentWallets,
+      createAgentWallet, updateAgentGuardrails, toggleAgent, deleteAgentWallet,
+      fundAgent, collectFromAgent,
     }}>
       {children}
     </WalletContext.Provider>
