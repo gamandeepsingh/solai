@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import type { TokenBalance } from '../../types/tokens'
 import SparklineChart from '../../components/ui/SparklineChart'
 import { getPriceHistory } from '../../lib/prices'

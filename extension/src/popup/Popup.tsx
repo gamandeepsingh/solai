@@ -111,6 +111,14 @@ function AppRoutes() {
     )
   }
 
+  if (isLocked) {
+    return (
+      <Routes>
+        <Route path="*" element={<LockScreen />} />
+      </Routes>
+    )
+  }
+
   // Connect approval popup opened by service worker
   if (isDAppApproval) {
     return <DAppApprovalScreen />
