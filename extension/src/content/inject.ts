@@ -33,8 +33,15 @@ window.addEventListener('message', (event) => {
   const pending = _pendingRequests.get(requestId)
   if (!pending) return
   _pendingRequests.delete(requestId)
-  if (error) pending.reject(new Error(error))
-  else pending.resolve(result)
+  if (error) {
+    if (error === '__SOLAI_CONTEXT_INVALIDATED__') {
+      pending.reject(new Error('SOLAI Wallet: extension was reloaded — please refresh this page to reconnect'))
+    } else {
+      pending.reject(new Error(error))
+    }
+  } else {
+    pending.resolve(result)
+  }
 })
 
 function sendRequest(method: string, params?: unknown): Promise<any> {
@@ -77,8 +84,28 @@ const solaiProvider = {
     emit('disconnect')
   },
 
-  async signTransaction(transaction: unknown): Promise<unknown> {
-    return sendRequest('signTransaction', { transaction })
+  async signTransaction(transaction: any): Promise<any> {
+    // Transaction objects can't survive window.postMessage structured-clone.
+    // Serialize to a plain byte array before crossing the context boundary.
+    let txBytes: number[]
+    if (transaction instanceof Uint8Array) {
+      txBytes = Array.from(transaction)
+    } else if (transaction && typeof transaction.serialize === 'function') {
+      try {
+        txBytes = Array.from(transaction.serialize({ requireAllSignatures: false, verifySignatures: false }) as Uint8Array)
+      } catch {
+        txBytes = Array.from(transaction.serialize({ requireAllSignatures: false }) as Uint8Array)
+      }
+    } else {
+      txBytes = Array.from(new Uint8Array(transaction as ArrayBuffer))
+    }
+    const result = await sendRequest('signTransaction', { transaction: txBytes })
+    const signed = new Uint8Array(result.signedTransaction)
+    // Return a duck-typed Transaction that dApps can call .serialize() on.
+    return {
+      serialize: (_opts?: unknown) => signed,
+      signatures: [{ signature: signed.slice(0, 64), publicKey: solaiProvider.publicKey }],
+    }
   },
 
   async signMessage(message: Uint8Array): Promise<{ signature: Uint8Array }> {
@@ -96,6 +123,18 @@ const solaiProvider = {
     return solaiProvider
   },
 }
+
+// ─── Agent wallet API ────────────────────────────────────────────────────────
+
+const solaiAgentApi = {
+  pay(params: { agentId: string; recipient: string; amountSol: number; memo?: string }): Promise<{ signature: string }> {
+    return sendRequest('AGENT_PAY', params)
+  },
+}
+
+try {
+  Object.defineProperty(window, 'solaiAgent', { value: Object.freeze(solaiAgentApi), writable: false, configurable: false })
+} catch {}
 
 // Only claim window.solana if no other wallet has already locked it.
 // If Phantom (or another wallet) already defined it as non-configurable,

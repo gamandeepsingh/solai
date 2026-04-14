@@ -8,7 +8,7 @@ import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
 import { CURATED_TOKENS, getMintForNetwork } from '../lib/tokens'
-import type { ScheduledJob } from '../types/agent'
+import type { ScheduledJob, AgentWallet } from '../types/agent'
 import type { ConditionalOrder } from '../types/orders'
 import type { Network } from '../types/wallet'
 
@@ -18,14 +18,23 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
 })
 
+async function getAgentKeypair(agentId: string): Promise<nacl.SignKeyPair | null> {
+  const session = await chrome.storage.session.get('agentSession') as any
+  const as = session?.agentSession
+  if (!as || as.expiresAt <= Date.now()) return null
+  const sk = as.keypairs?.[agentId]
+  if (!sk) return null
+  return nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
+}
+
 async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
   const session = await chrome.storage.session.get('walletSession') as any
   const ws = session?.walletSession
   if (!ws || ws.expiresAt <= Date.now()) return null
   // New multi-wallet format: { keypairs: Record<id, number[]>, expiresAt }
   if (ws.keypairs) {
-    const { activeWalletId } = await chrome.storage.local.get('activeWalletId') as any
-    const sk = ws.keypairs[activeWalletId]
+    const activeWalletId = await getLocal('activeWalletId')
+    const sk = ws.keypairs[activeWalletId!]
     if (!sk) return null
     return nacl.sign.keyPair.fromSecretKey(new Uint8Array(sk))
   }
@@ -248,6 +257,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 const pendingConnectRequests: Map<string, { resolve: (r: any) => void; origin: string }> = new Map()
 
+async function openSignApprovalPopup(requestId: string) {
+  const W = 360, H = 600
+  let left: number | undefined, top: number | undefined
+  try {
+    const focused = await chrome.windows.getLastFocused({ populate: false })
+    left = Math.round((focused.left ?? 0) + ((focused.width ?? 1280) - W) / 2)
+    top  = Math.round((focused.top  ?? 0) + ((focused.height ?? 800) - H) / 2)
+  } catch {}
+  chrome.windows.create({
+    url: `src/popup/index.html?page=sign-approval&requestId=${requestId}`,
+    type: 'popup',
+    width: W,
+    height: H,
+    ...(left !== undefined && { left, top }),
+  })
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id) return false
 
@@ -299,7 +325,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       pendingConnectRequests.delete(requestId)
       if (approved) {
         pending.resolve({ publicKey })
-        // Persist approval so future page loads reconnect silently
         ;(async () => {
           const origins = (await getLocal('approvedOrigins')) ?? []
           if (!origins.some(a => a.origin === pending.origin)) {
@@ -312,6 +337,88 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     }
     return false
+  }
+
+  if (
+    message?.type === 'SOLAI_SIGNMESSAGE' ||
+    message?.type === 'SOLAI_SIGNTRANSACTION' ||
+    message?.type === 'SOLAI_SIGNANDSENDTRANSACTION'
+  ) {
+    const typeMap: Record<string, string> = {
+      SOLAI_SIGNMESSAGE: 'signMessage',
+      SOLAI_SIGNTRANSACTION: 'signTransaction',
+      SOLAI_SIGNANDSENDTRANSACTION: 'signAndSendTransaction',
+    }
+    const requestId: string = message.requestId ?? Math.random().toString(36).slice(2)
+    const tabId: number | undefined = sender.tab?.id
+
+    ;(async () => {
+      // Always show the sign approval popup — never auto-sign.
+      // The popup handles unlock (if locked) and user confirmation before signing.
+      await chrome.storage.session.set({
+        [`pendingSign_${requestId}`]: { type: typeMap[message.type], params: message.params, tabId },
+      })
+      await openSignApprovalPopup(requestId)
+      sendResponse({ queued: true, requestId })
+    })()
+    return true
+  }
+
+  if (message?.type === 'SOLAI_DISCONNECT') {
+    sendResponse({})
+    return false
+  }
+
+  if (message?.type === 'SOLAI_AGENT_PAY') {
+    ;(async () => {
+      const { agentId, recipient, amountSol, origin } = message.params ?? {}
+      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const idx = agentWalletList.findIndex(a => a.id === agentId)
+      if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
+      const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
+      if (!agent.enabled) { sendResponse({ error: 'Agent is disabled (kill-switch active)' }); return }
+
+      const now = Date.now()
+      const todayMidnight = new Date().setHours(0, 0, 0, 0)
+      if (agent.stats.dailyResetAt < todayMidnight) {
+        agent.stats.dailySpentSol = 0
+        agent.stats.dailyResetAt = todayMidnight
+      }
+      const g = agent.guardrails
+      if (g.perTxLimitSol > 0 && amountSol > g.perTxLimitSol) {
+        sendResponse({ error: `Per-tx limit: ${g.perTxLimitSol} SOL` }); return
+      }
+      if (g.dailyBudgetSol > 0 && agent.stats.dailySpentSol + amountSol > g.dailyBudgetSol) {
+        sendResponse({ error: `Daily budget exceeded (${agent.stats.dailySpentSol.toFixed(4)}/${g.dailyBudgetSol} SOL used)` }); return
+      }
+      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => origin?.startsWith(o))) {
+        sendResponse({ error: 'Origin not in allowlist' }); return
+      }
+      if (g.cooldownMs > 0 && agent.stats.lastPaymentAt > 0 && now - agent.stats.lastPaymentAt < g.cooldownMs) {
+        const rem = Math.ceil((g.cooldownMs - (now - agent.stats.lastPaymentAt)) / 1000)
+        sendResponse({ error: `Cooldown active: ${rem}s remaining` }); return
+      }
+
+      const keypair = await getAgentKeypair(agentId)
+      if (!keypair) { sendResponse({ error: 'Session expired — unlock wallet to re-authorize agents' }); return }
+
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      try {
+        const sig = await sendSol(keypair, recipient, amountSol, network)
+        agent.stats.dailySpentSol += amountSol
+        agent.stats.totalSpentSol += amountSol
+        agent.stats.lastPaymentAt = now
+        agent.stats.txCount++
+        const updatedList = [...agentWalletList]
+        updatedList[idx] = agent
+        await setLocal('agentWallets', updatedList)
+        await logTx({ sig, type: 'send', timestamp: now, amount: amountSol, token: 'SOL', status: 'success', network, agentId })
+        sendResponse({ signature: sig })
+      } catch (e: any) {
+        sendResponse({ error: e?.message ?? 'Payment failed' })
+      }
+    })()
+    return true
   }
 
   return false

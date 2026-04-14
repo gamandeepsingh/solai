@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from '../context/ThemeContext'
 import { WalletProvider, useWallet } from '../context/WalletContext'
@@ -24,17 +24,54 @@ import TokenDetailScreen from '../screens/TokenDetail'
 import ExploreScreen from '../screens/Explore'
 import DAppApprovalScreen from '../screens/DAppApproval'
 import ConnectedAppsScreen from '../screens/ConnectedApps'
+import SignApprovalScreen from '../screens/SignApproval'
+import AgentWalletsScreen from '../screens/AgentWallets'
 
-// Detect whether this popup was opened for a dApp connection request
-const isDAppApproval = new URLSearchParams(window.location.search).get('page') === 'dapp-approval'
+const _params = new URLSearchParams(window.location.search)
+const isDAppApproval = _params.get('page') === 'dapp-approval'
+const isSignApproval = _params.get('page') === 'sign-approval'
+const signApprovalRequestId = _params.get('requestId') ?? ''
 
 function AppRoutes() {
   const { init, isLoading, isLocked, account } = useWallet()
   const [initialized, setInitialized] = useState(false)
+  // Set to true when sign was completed (approve or reject) so beforeunload
+  // doesn't also send a cancel.
+  const signCompletedRef = useRef(false)
+  // Pre-loaded pending sign data so the beforeunload handler can use tabId
+  // synchronously (chrome.storage is async and can't be awaited in beforeunload).
+  const pendingSignRef = useRef<any>(null)
 
   useEffect(() => {
     init().then(() => setInitialized(true))
   }, [])
+
+  // Pre-load pending sign data as soon as the popup is ready.
+  useEffect(() => {
+    if (!isSignApproval || !initialized) return
+    chrome.storage.session.get(`pendingSign_${signApprovalRequestId}`).then((stored: any) => {
+      pendingSignRef.current = stored[`pendingSign_${signApprovalRequestId}`]
+    })
+  }, [initialized])
+
+  // If the user closes the sign-approval popup without approving or rejecting,
+  // send a rejection back to the dApp tab.
+  useEffect(() => {
+    if (!isSignApproval || !initialized) return
+    const cancelHandler = () => {
+      if (signCompletedRef.current) return
+      const pending = pendingSignRef.current
+      if (pending?.tabId != null) {
+        chrome.tabs.sendMessage(pending.tabId, {
+          type: 'SOLAI_SIGN_RESULT',
+          requestId: signApprovalRequestId,
+          error: 'User rejected the request',
+        }).catch(() => {})
+      }
+    }
+    window.addEventListener('beforeunload', cancelHandler)
+    return () => window.removeEventListener('beforeunload', cancelHandler)
+  }, [initialized])
 
   if (!initialized || isLoading) {
     return (
@@ -56,10 +93,25 @@ function AppRoutes() {
     )
   }
 
-  // When locked, always show the lock screen.
-  // After unlock isLocked becomes false and we re-render — isDAppApproval
-  // (derived from window.location.search) is still true so we fall through
-  // to DAppApprovalScreen below instead of the normal routes.
+  // Sign-approval popup: unlock first if needed, then show the approval screen.
+  if (isSignApproval) {
+    if (isLocked) {
+      // LockScreen — after unlock, isLocked flips to false and React re-renders
+      // straight into the SignApprovalScreen branch below.
+      return (
+        <Routes>
+          <Route path="*" element={<LockScreen signMode />} />
+        </Routes>
+      )
+    }
+    return (
+      <SignApprovalScreen
+        requestId={signApprovalRequestId}
+        onDone={() => { signCompletedRef.current = true }}
+      />
+    )
+  }
+
   if (isLocked) {
     return (
       <Routes>
@@ -68,7 +120,7 @@ function AppRoutes() {
     )
   }
 
-  // Approval popup opened by service worker: skip the normal wallet UI
+  // Connect approval popup opened by service worker
   if (isDAppApproval) {
     return <DAppApprovalScreen />
   }
@@ -90,6 +142,7 @@ function AppRoutes() {
       <Route path="/explore" element={<ExploreScreen />} />
       <Route path="/about" element={<AboutScreen />} />
       <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
+      <Route path="/agent-wallets" element={<AgentWalletsScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )
