@@ -4,26 +4,23 @@ import { getLocal, setLocal } from './storage'
 import type { TxRecord } from '../types/history'
 import type { Network } from '../types/wallet'
 
-const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
+const MAX_LOG_SIZE = 1000
 
 export async function logTx(record: TxRecord): Promise<void> {
   const existing = (await getLocal('txLog')) ?? []
-  const updated = [record, ...existing.filter(t => t.sig !== record.sig)].slice(0, 200)
+  const updated = [record, ...existing.filter(t => t.sig !== record.sig)].slice(0, MAX_LOG_SIZE)
   await setLocal('txLog', updated)
 }
 
 export async function fetchTxHistory(publicKey: string, network: Network): Promise<TxRecord[]> {
-  const cutoff = Math.floor((Date.now() - SEVEN_DAYS) / 1000)
   const localLog = (await getLocal('txLog')) ?? []
-  const localRecent = localLog.filter(t => t.timestamp >= Date.now() - SEVEN_DAYS)
-  const localSigs = new Set(localRecent.map(t => t.sig))
+  const localSigs = new Set(localLog.map(t => t.sig))
 
   try {
     const conn = getConnection(network)
     const signatures = await conn.getSignaturesForAddress(new PublicKey(publicKey), { limit: 50 })
-    const recentSigs = signatures.filter(s => s.blockTime != null && s.blockTime >= cutoff)
 
-    const onChain: TxRecord[] = recentSigs
+    const onChain: TxRecord[] = signatures
       .filter(s => !localSigs.has(s.signature))
       .map(s => ({
         sig: s.signature,
@@ -32,10 +29,21 @@ export async function fetchTxHistory(publicKey: string, network: Network): Promi
         status: s.err ? 'error' as const : 'success' as const,
       }))
 
-    return [...localRecent, ...onChain].sort((a, b) => b.timestamp - a.timestamp)
+    return [...localLog, ...onChain].sort((a, b) => b.timestamp - a.timestamp)
   } catch {
-    return localRecent.sort((a, b) => b.timestamp - a.timestamp)
+    return localLog.sort((a, b) => b.timestamp - a.timestamp)
   }
+}
+
+export function groupByMonth(records: TxRecord[]): { label: string; records: TxRecord[] }[] {
+  const groups: Map<string, TxRecord[]> = new Map()
+  for (const r of records) {
+    const d = new Date(r.timestamp)
+    const label = d.toLocaleString('default', { month: 'long', year: 'numeric' })
+    if (!groups.has(label)) groups.set(label, [])
+    groups.get(label)!.push(r)
+  }
+  return Array.from(groups.entries()).map(([label, records]) => ({ label, records }))
 }
 
 export function timeAgo(ts: number): string {

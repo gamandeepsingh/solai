@@ -4,7 +4,7 @@ import Header from '../../components/layout/Header'
 import BottomNav from '../../components/layout/BottomNav'
 import Spinner from '../../components/ui/Spinner'
 import { useWallet } from '../../context/WalletContext'
-import { fetchTxHistory, timeAgo } from '../../lib/history'
+import { fetchTxHistory, groupByMonth, timeAgo } from '../../lib/history'
 import { getContacts } from '../../lib/contacts'
 import type { TxRecord } from '../../types/history'
 
@@ -74,13 +74,17 @@ export default function HistoryScreen() {
     return `${r.amount} ${r.token}${counterpart}`
   }
 
+  const grouped = groupByMonth(records)
+
   return (
     <div className="h-full flex flex-col bg-[var(--color-bg)]">
       <Header />
       <div className="flex-1 flex flex-col px-4 pb-16 overflow-y-auto">
         <div className="flex items-center justify-between py-3">
           <h2 className="text-lg font-bold">History</h2>
-          <span className="text-[10px] opacity-30">Last 7 days</span>
+          {records.length > 0 && (
+            <span className="text-[10px] opacity-30">{records.length} transactions</span>
+          )}
         </div>
 
         {isLoading ? (
@@ -91,49 +95,58 @@ export default function HistoryScreen() {
             <p className="text-sm">No transactions yet</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {records.map((r, i) => {
-              const subtitle = getSubtitle(r)
-              const hasNoSubtitle = !subtitle
-              return (
-                <motion.a
-                  key={r.sig}
-                  href={`https://solscan.io/tx/${r.sig}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="card-bg rounded-2xl p-3.5 flex items-center gap-3 hover:border-primary/20 border border-transparent transition-colors"
-                >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${typeColors[r.type]}`}>
-                    <TypeIcon type={r.type} />
-                  </div>
+          <div className="flex flex-col gap-4">
+            {grouped.map(({ label, records: groupRecords }) => (
+              <div key={label}>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[10px] font-semibold opacity-40 uppercase tracking-widest">{label}</p>
+                  <span className="text-[9px] opacity-20 bg-[var(--color-border)] px-1.5 py-0.5 rounded-full">{groupRecords.length}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {groupRecords.map((r, i) => {
+                    const subtitle = getSubtitle(r)
+                    return (
+                      <motion.a
+                        key={r.sig}
+                        href={`https://solscan.io/tx/${r.sig}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className="card-bg rounded-2xl p-3.5 flex items-center gap-3 hover:border-primary/20 border border-transparent transition-colors"
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${typeColors[r.type]}`}>
+                          <TypeIcon type={r.type} />
+                        </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold capitalize">{r.type === 'unknown' ? 'Transaction' : r.type}</span>
-                      {r.status === 'error' && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">failed</span>
-                      )}
-                    </div>
-                    {subtitle ? (
-                      <p className="text-[10px] opacity-60 truncate">{subtitle}</p>
-                    ) : hasNoSubtitle ? (
-                      <p className="text-[10px] opacity-30 font-mono truncate">{shortAddr(r.sig)}</p>
-                    ) : null}
-                  </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold capitalize">{r.type === 'unknown' ? 'Transaction' : r.type}</span>
+                            {r.status === 'error' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">failed</span>
+                            )}
+                          </div>
+                          {subtitle ? (
+                            <p className="text-[10px] opacity-60 truncate">{subtitle}</p>
+                          ) : (
+                            <p className="text-[10px] opacity-30 font-mono truncate">{shortAddr(r.sig)}</p>
+                          )}
+                        </div>
 
-                  <div className="text-right shrink-0">
-                    <p className="text-[10px] opacity-30">{timeAgo(r.timestamp)}</p>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-20 ml-auto mt-1">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                  </div>
-                </motion.a>
-              )
-            })}
+                        <div className="text-right shrink-0">
+                          <p className="text-[10px] opacity-30">{timeAgo(r.timestamp)}</p>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-20 ml-auto mt-1">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </div>
+                      </motion.a>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

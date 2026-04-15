@@ -53,6 +53,45 @@ export default function ReceiveScreen() {
   const { toast } = useToast()
   const address = account?.publicKey ?? ''
   const [tab, setTab] = useState<'main' | 'stealth'>('main')
+  const [isClaiming, setIsClaiming] = useState(false)
+  const [faucetCooldownHrs, setFaucetCooldownHrs] = useState(0)
+
+  const FAUCET_KEY = '_faucetLastClaim'
+  const FAUCET_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+  useEffect(() => {
+    if (network !== 'devnet') return
+    chrome.storage.local.get(FAUCET_KEY).then((stored: any) => {
+      const last = stored[FAUCET_KEY]
+      if (last) {
+        const remaining = FAUCET_COOLDOWN_MS - (Date.now() - last)
+        if (remaining > 0) setFaucetCooldownHrs(Math.ceil(remaining / (60 * 60 * 1000)))
+      }
+    })
+  }, [network])
+
+  async function handleFaucet() {
+    if (!address || faucetCooldownHrs > 0) return
+    setIsClaiming(true)
+    try {
+      const res = await fetch('https://faucet.solana.com/api/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: address, amount: 1 }),
+      })
+      if (res.ok) {
+        await chrome.storage.local.set({ [FAUCET_KEY]: Date.now() })
+        setFaucetCooldownHrs(24)
+        toast('1 devnet SOL requested! May take a few seconds.', 'success')
+      } else {
+        toast('Faucet request failed — try faucet.solana.com directly', 'error')
+      }
+    } catch {
+      toast('Could not reach faucet — try faucet.solana.com directly', 'error')
+    } finally {
+      setIsClaiming(false)
+    }
+  }
 
   const myStealthAddresses = stealthAddresses.filter(s => s.walletId === activeId)
 
@@ -194,6 +233,25 @@ export default function ReceiveScreen() {
               <p className="text-xs font-mono break-all leading-relaxed opacity-80">{address}</p>
               <div className="mt-3 flex justify-end"><CopyButton text={address} /></div>
             </div>
+
+            {network === 'devnet' && (
+              <button
+                onClick={handleFaucet}
+                disabled={isClaiming || faucetCooldownHrs > 0}
+                className="w-full py-2.5 rounded-2xl border border-primary/30 text-primary text-xs font-semibold flex items-center justify-center gap-2 hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isClaiming ? (
+                  <div className="w-3.5 h-3.5 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2v6M12 18v4M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M2 12h6M18 12h4M4.93 19.07l4.24-4.24M14.83 9.17l4.24-4.24"/>
+                  </svg>
+                )}
+                {faucetCooldownHrs > 0
+                  ? `Available in ${faucetCooldownHrs}h`
+                  : 'Get 1 devnet SOL from faucet'}
+              </button>
+            )}
           </FadeIn>
         ) : (
           <div className="flex flex-col gap-3 px-4 py-4">

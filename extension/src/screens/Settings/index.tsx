@@ -8,7 +8,7 @@ import Input from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
 import { useWallet } from '../../context/WalletContext'
 import { useTheme } from '../../context/ThemeContext'
-import { getLocal, setLocal, getSync, setSync } from '../../lib/storage'
+import { getLocal, setLocal, getSync, setSync, removeLocal } from '../../lib/storage'
 import { getMnemonicFromKeystore } from '../../lib/wallet'
 import FadeIn from '../../components/animations/FadeIn'
 import type { Network } from '../../types/wallet'
@@ -36,6 +36,13 @@ export default function SettingsScreen() {
   const [resetPassword, setResetPassword] = useState('')
   const [resetError, setResetError] = useState('')
   const [isResetting, setIsResetting] = useState(false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+
+  useEffect(() => {
+    getSync('notificationsEnabled').then(v => {
+      if (v !== undefined) setNotificationsEnabled(v)
+    })
+  }, [])
 
   async function handleChangePassword() {
     setChangePwError('')
@@ -129,6 +136,25 @@ export default function SettingsScreen() {
               {themeSetting === 'system' && (
                 <p className="text-[10px] opacity-40">Following OS: {theme} mode</p>
               )}
+            </div>
+          </Section>
+
+          <Section title="Notifications">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm">Receive alerts</p>
+                <p className="text-[10px] opacity-40 mt-0.5">Notify when SOL or tokens arrive</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const next = !notificationsEnabled
+                  setNotificationsEnabled(next)
+                  await setSync('notificationsEnabled', next)
+                }}
+                className={`w-10 h-5 rounded-full relative transition-colors ${notificationsEnabled ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
             </div>
           </Section>
 

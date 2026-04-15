@@ -18,6 +18,10 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
 })
 
+chrome.notifications.onClicked.addListener(() => {
+  chrome.action.openPopup?.().catch(() => {})
+})
+
 async function getAgentKeypair(agentId: string): Promise<nacl.SignKeyPair | null> {
   const session = await chrome.storage.session.get('agentSession') as any
   const as = session?.agentSession
@@ -45,6 +49,9 @@ async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'balance-refresh') {
+    const notifSetting = (await chrome.storage.sync.get('notificationsEnabled') as any)?.notificationsEnabled
+    const notifEnabled = notifSetting !== false
+
     const [wallets, activeId, legacyKeystore] = await Promise.all([
       getLocal('wallets'),
       getLocal('activeWalletId'),
@@ -76,7 +83,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       const newSolBalance = result.value / 1_000_000_000
 
       // Notify if SOL balance increased (skip on very first cache population)
-      if (prevSolBalance !== undefined && newSolBalance > prevSolBalance + 0.000001) {
+      if (notifEnabled && prevSolBalance !== undefined && newSolBalance > prevSolBalance + 0.000001) {
         const received = (newSolBalance - prevSolBalance).toFixed(6)
         chrome.notifications.create(`recv-sol-${Date.now()}`, {
           type: 'basic',
@@ -118,7 +125,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         const amount = Number(info.tokenAmount.uiAmount ?? 0)
         if (amount > 0) newSplBalances[mint] = amount
 
-        if (!isFirstSplCheck) {
+        if (notifEnabled && !isFirstSplCheck) {
           const prev = cachedSpl[mint] ?? 0
           if (amount > prev + 0.000001) {
             const symbol = mintToSymbol[mint] ?? 'Token'
@@ -163,7 +170,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icons/icon128.png'),
             title: 'Scheduled Payment Sent',
-            message: `Sent ${job.action.amount} ${job.action.token} to ${job.action.recipientLabel}`,
+            message: `${job.action.amount} ${job.action.token} sent successfully`,
           })
         } catch (e: any) {
           chrome.notifications.create(`scheduled-err-${job.id}-${now}`, {
@@ -286,14 +293,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { requestId, params } = message
 
     ;(async () => {
-      // If this origin was previously approved, return the public key silently
+      // If this origin was previously approved and not expired, return the public key silently
+      const ORIGIN_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
       const approvedOrigins = (await getLocal('approvedOrigins')) ?? []
-      if (approvedOrigins.some(a => a.origin === params.origin)) {
+      const approvedEntry = approvedOrigins.find(a =>
+        a.origin === params.origin &&
+        Date.now() - new Date(a.connectedAt).getTime() < ORIGIN_EXPIRY_MS
+      )
+      if (approvedEntry) {
+        // Update lastUsedAt
+        const updated = approvedOrigins.map(a =>
+          a.origin === params.origin ? { ...a, lastUsedAt: new Date().toISOString() } : a
+        )
+        await setLocal('approvedOrigins', updated as any)
         const [wallets, activeId, legacyKs] = await Promise.all([
           getLocal('wallets'), getLocal('activeWalletId'), getLocal('keystore'),
         ])
         const wallet = wallets?.find(w => w.id === activeId) ?? wallets?.[0]
-        const pk = wallet?.keystore.publicKey ?? legacyKs?.publicKey
+        const pk = wallet?.keystore?.publicKey ?? wallet?.publicKey ?? legacyKs?.publicKey
         if (pk) { sendResponse({ publicKey: pk }); return }
       }
 
@@ -349,7 +366,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       SOLAI_SIGNTRANSACTION: 'signTransaction',
       SOLAI_SIGNANDSENDTRANSACTION: 'signAndSendTransaction',
     }
-    const requestId: string = message.requestId ?? Math.random().toString(36).slice(2)
+    const requestId: string = message.requestId ?? crypto.randomUUID()
     const tabId: number | undefined = sender.tab?.id
 
     ;(async () => {
@@ -391,7 +408,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (g.dailyBudgetSol > 0 && agent.stats.dailySpentSol + amountSol > g.dailyBudgetSol) {
         sendResponse({ error: `Daily budget exceeded (${agent.stats.dailySpentSol.toFixed(4)}/${g.dailyBudgetSol} SOL used)` }); return
       }
-      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => origin?.startsWith(o))) {
+      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => {
+        try { return new URL(origin).hostname === new URL(o).hostname } catch { return false }
+      })) {
         sendResponse({ error: 'Origin not in allowlist' }); return
       }
       if (g.cooldownMs > 0 && agent.stats.lastPaymentAt > 0 && now - agent.stats.lastPaymentAt < g.cooldownMs) {

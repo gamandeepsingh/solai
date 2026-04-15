@@ -154,9 +154,11 @@ export default function WalletSwitcher({ onClose }: Props) {
             <div className="flex flex-col gap-1 p-3">
               {accounts.map(wallet => (
                 <div key={wallet.id} className={`rounded-2xl border transition-colors ${wallet.id === activeId ? 'border-primary/40 bg-primary/5' : 'border-[var(--color-border)] bg-[var(--color-card)]'}`}>
-                  {editingId === wallet.id ? (
+                  {(() => {
+                    const pk = wallet.type === 'ledger' ? (wallet.publicKey ?? '') : (wallet.keystore?.publicKey ?? '')
+                    return editingId === wallet.id ? (
                     <div className="flex items-center gap-2 px-3 py-3">
-                      <WalletAvatar publicKey={wallet.keystore.publicKey} size={32} />
+                      <WalletAvatar publicKey={pk} size={32} />
                       <input
                         className="flex-1 bg-transparent text-sm font-medium outline-none border-b border-primary pb-0.5"
                         value={editName}
@@ -169,10 +171,15 @@ export default function WalletSwitcher({ onClose }: Props) {
                     </div>
                   ) : (
                     <button className="w-full flex items-center gap-3 px-3 py-3 text-left" onClick={() => handleSwitch(wallet)}>
-                      <WalletAvatar publicKey={wallet.keystore.publicKey} size={36} />
+                      <WalletAvatar publicKey={pk} size={36} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{wallet.name}</p>
-                        <p className="text-[10px] opacity-40 font-mono">{truncate(wallet.keystore.publicKey)}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-semibold truncate">{wallet.name}</p>
+                          {wallet.type === 'ledger' && (
+                            <span className="text-[9px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium shrink-0">Ledger</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] opacity-40 font-mono">{truncate(pk)}</p>
                       </div>
                       {wallet.id === activeId && (
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
@@ -204,7 +211,8 @@ export default function WalletSwitcher({ onClose }: Props) {
                         </button>
                       )}
                     </button>
-                  )}
+                  )
+                  })()}
                 </div>
               ))}
             </div>

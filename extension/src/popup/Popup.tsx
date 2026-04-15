@@ -8,6 +8,7 @@ import OnboardingWelcome from '../screens/Onboarding/Welcome'
 import OnboardingCreate from '../screens/Onboarding/CreateWallet'
 import OnboardingConfirm from '../screens/Onboarding/MnemonicConfirm'
 import OnboardingImport from '../screens/Onboarding/ImportWallet'
+import OnboardingLedger from '../screens/Onboarding/ConnectLedger'
 import HomeScreen from '../screens/Home'
 import SendScreen from '../screens/Send'
 import SwapScreen from '../screens/Swap'
@@ -26,6 +27,7 @@ import DAppApprovalScreen from '../screens/DAppApproval'
 import ConnectedAppsScreen from '../screens/ConnectedApps'
 import SignApprovalScreen from '../screens/SignApproval'
 import AgentWalletsScreen from '../screens/AgentWallets'
+import BatchSendScreen from '../screens/BatchSend'
 
 const _params = new URLSearchParams(window.location.search)
 const isDAppApproval = _params.get('page') === 'dapp-approval'
@@ -88,6 +90,7 @@ function AppRoutes() {
         <Route path="/create" element={<OnboardingCreate />} />
         <Route path="/confirm" element={<OnboardingConfirm />} />
         <Route path="/import" element={<OnboardingImport />} />
+        <Route path="/ledger-connect" element={<OnboardingLedger />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
@@ -143,6 +146,7 @@ function AppRoutes() {
       <Route path="/about" element={<AboutScreen />} />
       <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
       <Route path="/agent-wallets" element={<AgentWalletsScreen />} />
+      <Route path="/batch-send" element={<BatchSendScreen />} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   )

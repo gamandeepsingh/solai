@@ -46,9 +46,9 @@ window.addEventListener('message', (event) => {
 
 function sendRequest(method: string, params?: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
-    const requestId = Math.random().toString(36).slice(2)
+    const requestId = crypto.randomUUID()
     _pendingRequests.set(requestId, { resolve, reject })
-    window.postMessage({ type: SOLAI_MSG, requestId, method, params }, '*')
+    window.postMessage({ type: SOLAI_MSG, requestId, method, params }, window.location.origin || '*')
     setTimeout(() => {
       if (_pendingRequests.has(requestId)) {
         _pendingRequests.delete(requestId)
@@ -110,6 +110,7 @@ const solaiProvider = {
 
   async signMessage(message: Uint8Array): Promise<{ signature: Uint8Array }> {
     const result = await sendRequest('signMessage', { message: Array.from(message) })
+    if (!Array.isArray(result?.signature)) throw new Error('Invalid signature response')
     return { signature: new Uint8Array(result.signature) }
   },
 
@@ -134,7 +135,9 @@ const solaiAgentApi = {
 
 try {
   Object.defineProperty(window, 'solaiAgent', { value: Object.freeze(solaiAgentApi), writable: false, configurable: false })
-} catch {}
+} catch (e) {
+  console.warn('[SOLAI] Could not define window.solaiAgent:', e)
+}
 
 // Only claim window.solana if no other wallet has already locked it.
 // If Phantom (or another wallet) already defined it as non-configurable,
@@ -148,9 +151,8 @@ try {
       configurable: false,
     })
   }
-} catch {
-  // Another extension already claimed window.solana — that's fine,
-  // SOLAI will still appear via the Wallet Standard protocol.
+} catch (e) {
+  console.warn('[SOLAI] Could not claim window.solana — another wallet extension may have taken it:', e)
 }
 
 // ─── Wallet Standard announcement protocol ──────────────────────────────────
