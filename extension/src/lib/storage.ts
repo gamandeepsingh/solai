@@ -26,6 +26,7 @@ type LocalData = {
   approvedOrigins: { origin: string; connectedAt: string }[]
   stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
   agentWallets: AgentWallet[]
+  watchlist: string[]
 }
 
 type SyncData = {

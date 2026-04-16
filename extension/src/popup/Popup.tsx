@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
+import CommandPalette from '../components/ui/CommandPalette'
+import ChangelogModal from '../components/ui/ChangelogModal'
 import { ThemeProvider } from '../context/ThemeContext'
 import { WalletProvider, useWallet } from '../context/WalletContext'
 import { AIProvider } from '../context/AIContext'
@@ -28,6 +31,7 @@ import ConnectedAppsScreen from '../screens/ConnectedApps'
 import SignApprovalScreen from '../screens/SignApproval'
 import AgentWalletsScreen from '../screens/AgentWallets'
 import BatchSendScreen from '../screens/BatchSend'
+import WatchlistScreen from '../screens/Watchlist'
 
 const _params = new URLSearchParams(window.location.search)
 const isDAppApproval = _params.get('page') === 'dapp-approval'
@@ -35,8 +39,9 @@ const isSignApproval = _params.get('page') === 'sign-approval'
 const signApprovalRequestId = _params.get('requestId') ?? ''
 
 function AppRoutes() {
-  const { init, isLoading, isLocked, account } = useWallet()
+  const { init, isLoading, isLocked, account, lock } = useWallet()
   const [initialized, setInitialized] = useState(false)
+  const [cmdOpen, setCmdOpen] = useState(false)
   // Set to true when sign was completed (approve or reject) so beforeunload
   // doesn't also send a cancel.
   const signCompletedRef = useRef(false)
@@ -74,6 +79,18 @@ function AppRoutes() {
     window.addEventListener('beforeunload', cancelHandler)
     return () => window.removeEventListener('beforeunload', cancelHandler)
   }, [initialized])
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey
+      const tag = (e.target as HTMLElement)?.tagName
+      const inInput = tag === 'INPUT' || tag === 'TEXTAREA'
+      if (mod && e.key === 'k') { e.preventDefault(); setCmdOpen(o => !o) }
+      if (mod && e.key === 'l' && !inInput) { e.preventDefault(); lock() }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [lock])
 
   if (!initialized || isLoading) {
     return (
@@ -129,26 +146,32 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/home" replace />} />
-      <Route path="/home" element={<HomeScreen />} />
-      <Route path="/send" element={<SendScreen />} />
-      <Route path="/swap" element={<SwapScreen />} />
-      <Route path="/receive" element={<ReceiveScreen />} />
-      <Route path="/contacts" element={<ContactsScreen />} />
-      <Route path="/history" element={<HistoryScreen />} />
-      <Route path="/orders" element={<OrdersScreen />} />
-      <Route path="/ai" element={<AIChatScreen />} />
-      <Route path="/settings" element={<SettingsScreen />} />
-      <Route path="/nfts" element={<NFTsScreen />} />
-      <Route path="/token" element={<TokenDetailScreen />} />
-      <Route path="/explore" element={<ExploreScreen />} />
-      <Route path="/about" element={<AboutScreen />} />
-      <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
-      <Route path="/agent-wallets" element={<AgentWalletsScreen />} />
-      <Route path="/batch-send" element={<BatchSendScreen />} />
-      <Route path="*" element={<Navigate to="/home" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="/home" element={<HomeScreen />} />
+        <Route path="/send" element={<SendScreen />} />
+        <Route path="/swap" element={<SwapScreen />} />
+        <Route path="/receive" element={<ReceiveScreen />} />
+        <Route path="/contacts" element={<ContactsScreen />} />
+        <Route path="/history" element={<HistoryScreen />} />
+        <Route path="/orders" element={<OrdersScreen />} />
+        <Route path="/ai" element={<AIChatScreen />} />
+        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="/nfts" element={<NFTsScreen />} />
+        <Route path="/token" element={<TokenDetailScreen />} />
+        <Route path="/explore" element={<ExploreScreen />} />
+        <Route path="/about" element={<AboutScreen />} />
+        <Route path="/connected-apps" element={<ConnectedAppsScreen />} />
+        <Route path="/agent-wallets" element={<AgentWalletsScreen />} />
+        <Route path="/batch-send" element={<BatchSendScreen />} />
+        <Route path="/watchlist" element={<WatchlistScreen />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
+      </Routes>
+      <AnimatePresence>
+        {cmdOpen && <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />}
+      </AnimatePresence>
+    </>
   )
 }
 
@@ -161,6 +184,7 @@ export default function Popup() {
             <ToastProvider>
               <AIProvider>
                 <AppRoutes />
+                <ChangelogModal />
               </AIProvider>
             </ToastProvider>
           </div>

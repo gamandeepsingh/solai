@@ -8,6 +8,148 @@ import { fetchTxHistory, groupByMonth, timeAgo } from '../../lib/history'
 import { getContacts } from '../../lib/contacts'
 import type { TxRecord } from '../../types/history'
 
+const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+function SpendingHeatmap({ records }: { records: TxRecord[] }) {
+  const WEEKS = 13
+  const today = new Date(); today.setHours(0,0,0,0)
+
+  const countMap: Record<string, number> = {}
+  for (const r of records) {
+    const d = new Date(r.timestamp); d.setHours(0,0,0,0)
+    countMap[d.toISOString().slice(0,10)] = (countMap[d.toISOString().slice(0,10)] ?? 0) + 1
+  }
+
+  // Build weeks: each column = one week (Mon→Sun), newest on the right
+  const totalDays = WEEKS * 7
+  const cols: { date: string; count: number; month: number }[][] = []
+  for (let w = WEEKS - 1; w >= 0; w--) {
+    const week: typeof cols[0] = []
+    for (let d = 6; d >= 0; d--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - (w * 7 + d))
+      const key = date.toISOString().slice(0,10)
+      week.push({ date: key, count: countMap[key] ?? 0, month: date.getMonth() })
+    }
+    week.reverse()
+    cols.push(week)
+  }
+
+  // Month labels: find where the month changes across columns
+  const monthLabels: { col: number; label: string }[] = []
+  let lastMonth = -1
+  cols.forEach((week, wi) => {
+    const m = week[0].month
+    if (m !== lastMonth) {
+      monthLabels.push({ col: wi, label: new Date(today.getFullYear(), m, 1).toLocaleString('default', { month: 'short' }) })
+      lastMonth = m
+    }
+  })
+
+  function cellStyle(n: number) {
+    if (n === 0) return { opacity: 0.12, backgroundColor: 'var(--color-text)' }
+    if (n === 1) return { opacity: 0.35, backgroundColor: 'var(--color-primary)' }
+    if (n <= 3) return { opacity: 0.65, backgroundColor: 'var(--color-primary)' }
+    return { opacity: 1, backgroundColor: 'var(--color-primary)' }
+  }
+
+  const totalActive = Object.keys(countMap).length
+  const totalTx = records.length
+
+  return (
+    <div className="card-bg rounded-2xl px-4 pt-3 pb-3.5">
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-xs font-semibold opacity-60">Activity</p>
+        <p className="text-[10px] opacity-30">{totalTx} tx across {totalActive} days</p>
+      </div>
+
+      {/* Month labels */}
+      <div className="flex mb-1" style={{ gap: 2 }}>
+        <div style={{ width: 12 }} /> {/* day-label offset */}
+        {cols.map((_, wi) => {
+          const label = monthLabels.find(m => m.col === wi)
+          return (
+            <div key={wi} className="flex-1 text-[8px] opacity-30 font-medium">
+              {label?.label ?? ''}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Grid */}
+      <div className="flex" style={{ gap: 2 }}>
+        {/* Day labels */}
+        <div className="flex flex-col justify-between" style={{ gap: 2, width: 10, marginRight: 2 }}>
+          {DAY_LABELS.map((d, i) => (
+            <div key={i} className="text-[7px] opacity-25 font-medium leading-none h-3 flex items-center">{i % 2 === 0 ? d : ''}</div>
+          ))}
+        </div>
+
+        {/* Week columns */}
+        {cols.map((week, wi) => (
+          <div key={wi} className="flex flex-col flex-1" style={{ gap: 2 }}>
+            {week.map(cell => (
+              <div
+                key={cell.date}
+                className="rounded-sm h-3 transition-opacity"
+                style={cellStyle(cell.count)}
+                title={cell.count > 0 ? `${cell.date}: ${cell.count} tx` : cell.date}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-1.5 mt-2.5 justify-end">
+        <span className="text-[8px] opacity-25">Less</span>
+        {[0, 1, 2, 4].map(n => (
+          <div key={n} className="w-3 h-3 rounded-sm" style={cellStyle(n)} />
+        ))}
+        <span className="text-[8px] opacity-25">More</span>
+      </div>
+    </div>
+  )
+}
+
+function TxStats({ records }: { records: TxRecord[] }) {
+  const counts = { send: 0, receive: 0, swap: 0, unknown: 0 }
+  let totalSent = 0
+  for (const r of records) {
+    counts[r.type]++
+    if (r.type === 'send' && r.amount) totalSent += r.amount
+  }
+  const total = records.length
+  if (total === 0) return null
+  const bars: { label: string; key: TxRecord['type']; color: string }[] = [
+    { label: 'Sends', key: 'send', color: 'bg-orange-400' },
+    { label: 'Receives', key: 'receive', color: 'bg-primary' },
+    { label: 'Swaps', key: 'swap', color: 'bg-blue-400' },
+  ]
+  return (
+    <div className="card-bg rounded-2xl p-3">
+      <p className="text-[10px] opacity-40 uppercase tracking-widest mb-2.5">Transaction Breakdown</p>
+      <div className="flex gap-1 h-2 rounded-full overflow-hidden mb-3">
+        {bars.map(b => counts[b.key] > 0 && (
+          <div key={b.key} className={`${b.color}`} style={{ flex: counts[b.key] }} />
+        ))}
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        {bars.map(b => (
+          <div key={b.key} className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${b.color}`} />
+            <span className="text-[10px] opacity-60">{b.label}</span>
+            <span className="text-[10px] font-semibold">{counts[b.key]}</span>
+          </div>
+        ))}
+      </div>
+      {totalSent > 0 && (
+        <p className="text-[10px] opacity-40 mt-2">Total sent: <span className="opacity-80 font-medium">{totalSent.toFixed(4)} SOL</span></p>
+      )}
+    </div>
+  )
+}
+
 function TypeIcon({ type }: { type: TxRecord['type'] }) {
   if (type === 'send') return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -86,6 +228,13 @@ export default function HistoryScreen() {
             <span className="text-[10px] opacity-30">{records.length} transactions</span>
           )}
         </div>
+
+        {!isLoading && records.length > 0 && (
+          <div className="flex flex-col gap-2 mb-4">
+            <SpendingHeatmap records={records} />
+            <TxStats records={records} />
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center mt-10"><Spinner /></div>

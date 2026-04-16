@@ -65,6 +65,30 @@ export default function SettingsScreen() {
     getLocal('openrouterApiKey').then(k => { if (k) { setSavedKey(k); setApiKey(k) } })
   }, [])
 
+  async function handleExport() {
+    const [contacts, stealthAddresses, agentWallets, scheduledJobs] = await Promise.all([
+      getLocal('contacts'),
+      getLocal('stealthAddresses'),
+      getLocal('agentWallets'),
+      getLocal('scheduledJobs'),
+    ])
+    const data = {
+      version: chrome.runtime.getManifest().version,
+      exportedAt: new Date().toISOString(),
+      contacts: contacts ?? [],
+      stealthAddresses: (stealthAddresses ?? []).map(({ publicKey, label, walletId, index }) => ({ publicKey, label, walletId, index })),
+      agentWallets: (agentWallets ?? []).map(({ id, name, guardrails, enabled, publicKey }) => ({ id, name, guardrails, enabled, publicKey })),
+      scheduledJobs: scheduledJobs ?? [],
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `solai-settings-${new Date().toISOString().slice(0,10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleReset() {
     if (!resetPassword) return setResetError('Enter your password')
     setIsResetting(true)
@@ -218,6 +242,12 @@ export default function SettingsScreen() {
               <Row label="Address" value={account?.publicKey ? `${account.publicKey.slice(0, 8)}...${account.publicKey.slice(-8)}` : '—'} />
               <Row label="Network" value={network} />
             </div>
+          </Section>
+
+          <Section title="Data">
+            <Button variant="secondary" size="sm" fullWidth onClick={handleExport}>
+              Export Settings (JSON)
+            </Button>
           </Section>
 
           <Section title="About">

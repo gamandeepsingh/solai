@@ -10,8 +10,9 @@ import { useBalance } from '../../hooks/useBalance'
 import { validateRecipientAddress } from '../../lib/solana'
 import { logTx } from '../../lib/history'
 import { useWallet } from '../../context/WalletContext'
-import { updateContactInteraction } from '../../lib/contacts'
+import { updateContactInteraction, getContacts } from '../../lib/contacts'
 import type { TokenBalance } from '../../types/tokens'
+import type { Contact } from '../../types/contacts'
 
 type Step = 'address' | 'amount' | 'confirm' | 'done'
 
@@ -65,6 +66,10 @@ export default function SendScreen() {
   const [addrWarning, setAddrWarning] = useState('')
   const [anomalyWarning, setAnomalyWarning] = useState('')
   const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  useEffect(() => { getContacts().then(setContacts) }, [])
 
   const DRAFT_KEY = 'sendDraft'
 
@@ -180,15 +185,42 @@ export default function SendScreen() {
                 </div>
                 <p className="text-xs opacity-40">Enter recipient address</p>
               </div>
-              <Input
-                label="Recipient Address"
-                placeholder="Solana wallet address"
-                className="px-3"
-                value={recipient}
-                onChange={e => { setRecipient(e.target.value); setError('') }}
-                error={error}
-                onKeyDown={e => e.key === 'Enter' && goAddress()}
-              />
+              <div className="relative">
+                <Input
+                  label="Recipient Address"
+                  placeholder="Address or contact name"
+                  className="px-3"
+                  value={recipient}
+                  onChange={e => { setRecipient(e.target.value); setError(''); setShowSuggestions(true) }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  error={error}
+                  onKeyDown={e => e.key === 'Enter' && goAddress()}
+                />
+                {showSuggestions && recipient.length > 0 && (() => {
+                  const q = recipient.toLowerCase()
+                  const matches = contacts.filter(c =>
+                    c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q)
+                  ).slice(0, 5)
+                  if (!matches.length) return null
+                  return (
+                    <div className="absolute z-20 top-full left-0 right-0 mt-1 card-bg rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-lg">
+                      {matches.map(c => (
+                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setShowSuggestions(false) }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-left">
+                          <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-sm shrink-0">
+                            {c.emoji || c.name[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate">{c.name}</p>
+                            <p className="text-[10px] opacity-40 font-mono">{c.address.slice(0,6)}…{c.address.slice(-6)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
               <div>
                 <p className="text-[10px] opacity-40 mb-2">Select token</p>
                 {ownedBalances.length > 0 ? (
@@ -281,6 +313,7 @@ export default function SendScreen() {
         </AnimatePresence>
       </div>
       <BottomNav />
+
     </div>
   )
 }

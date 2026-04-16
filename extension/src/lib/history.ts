@@ -14,24 +14,27 @@ export async function logTx(record: TxRecord): Promise<void> {
 
 export async function fetchTxHistory(publicKey: string, network: Network): Promise<TxRecord[]> {
   const localLog = (await getLocal('txLog')) ?? []
-  const localSigs = new Set(localLog.map(t => t.sig))
+  // Show records tagged for this network, plus legacy records with no network tag (assume mainnet)
+  const filtered = localLog.filter(r => !r.network || r.network === network)
+  const filteredSigs = new Set(filtered.map(t => t.sig))
 
   try {
     const conn = getConnection(network)
     const signatures = await conn.getSignaturesForAddress(new PublicKey(publicKey), { limit: 50 })
 
     const onChain: TxRecord[] = signatures
-      .filter(s => !localSigs.has(s.signature))
+      .filter(s => !filteredSigs.has(s.signature))
       .map(s => ({
         sig: s.signature,
         type: 'unknown' as const,
         timestamp: (s.blockTime ?? 0) * 1000,
         status: s.err ? 'error' as const : 'success' as const,
+        network,
       }))
 
-    return [...localLog, ...onChain].sort((a, b) => b.timestamp - a.timestamp)
+    return [...filtered, ...onChain].sort((a, b) => b.timestamp - a.timestamp)
   } catch {
-    return localLog.sort((a, b) => b.timestamp - a.timestamp)
+    return filtered.sort((a, b) => b.timestamp - a.timestamp)
   }
 }
 
