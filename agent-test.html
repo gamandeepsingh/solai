@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOLAI Agent Wallet Tester</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --card: #111111;
+      --border: #222222;
+      --text: #e8e8e8;
+      --muted: #555555;
+      --primary: #ABFF7A;
+      --primary-dim: rgba(171, 255, 122, 0.12);
+      --red: #ff5555;
+      --red-dim: rgba(255, 85, 85, 0.12);
+      --green: #55ff88;
+      --green-dim: rgba(85, 255, 136, 0.10);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--primary-dim);
+      border: 1px solid rgba(171,255,122,0.25);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 { font-size: 20px; font-weight: 700; }
+    .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid transparent;
+    }
+    .status-pill.ok { background: var(--green-dim); color: var(--green); border-color: rgba(85,255,136,0.2); }
+    .status-pill.err { background: var(--red-dim); color: var(--red); border-color: rgba(255,85,85,0.2); }
+    .status-pill.wait { background: rgba(255,200,80,0.1); color: #ffc850; border-color: rgba(255,200,80,0.2); }
+
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+    .status-pill.err .dot, .status-pill.wait .dot { animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .label-text {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus { border-color: rgba(171,255,122,0.4); }
+    input::placeholder { color: var(--muted); }
+    input[type=number] { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    .row { display: flex; gap: 10px; }
+    .row label { flex: 1; }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      outline: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #0a0a0a;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      width: 100%;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .btn-copy {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 11px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-copy:hover { border-color: var(--primary); color: var(--primary); }
+
+    .result {
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.6;
+      word-break: break-all;
+      display: none;
+    }
+    .result.success {
+      background: var(--green-dim);
+      border: 1px solid rgba(85,255,136,0.2);
+      color: var(--green);
+      display: block;
+    }
+    .result.error {
+      background: var(--red-dim);
+      border: 1px solid rgba(255,85,85,0.2);
+      color: var(--red);
+      display: block;
+    }
+
+    .sig-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+    }
+    .sig-link:hover { text-decoration: underline; }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .info-label { color: var(--muted); }
+    .info-value { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text); display: flex; align-items: center; gap: 6px; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(10,10,10,0.3);
+      border-top-color: #0a0a0a;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .steps li { display: flex; gap: 8px; list-style: none; }
+    .step-num {
+      width: 18px; height: 18px;
+      background: var(--primary-dim);
+      color: var(--primary);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      flex-shrink: 0; margin-top: 1px;
+    }
+
+    .divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+    footer { text-align: center; font-size: 11px; color: var(--muted); padding-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div>
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ABFF7A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="8" width="18" height="13" rx="2"/>
+            <path d="M8 8V6a4 4 0 0 1 8 0v2"/>
+            <circle cx="9" cy="14" r="1" fill="#ABFF7A"/>
+            <circle cx="15" cy="14" r="1" fill="#ABFF7A"/>
+            <path d="M9.5 18c.8.5 1.5.8 2.5.8s1.7-.3 2.5-.8"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Agent Wallet Tester</h1>
+          <div class="subtitle">SOLAI · dApp simulation</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extension status -->
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <span class="status-pill wait" id="ext-status">
+        <span class="dot"></span>
+        <span>Checking extension…</span>
+      </span>
+      <button class="btn-copy" onclick="location.reload()">Refresh</button>
+    </div>
+
+    <!-- How to use -->
+    <div class="card">
+      <div class="card-title">How to use</div>
+      <ul class="steps">
+        <li><span class="step-num">1</span><span>Install the SOLAI extension and unlock your wallet</span></li>
+        <li><span class="step-num">2</span><span>In the extension, go to <strong style="color:var(--text)">Settings → Agent Wallets</strong> and create an agent</span></li>
+        <li><span class="step-num">3</span><span>Fund the agent with SOL from the extension</span></li>
+        <li><span class="step-num">4</span><span>Copy the Agent ID and paste it below, then trigger a payment</span></li>
+      </ul>
+    </div>
+
+    <!-- Agent info display -->
+    <div class="card" id="agent-info-card" style="display:none;">
+      <div class="card-title">Extension Detected</div>
+      <div id="agent-info-rows"></div>
+    </div>
+
+    <!-- Payment form -->
+    <div class="card">
+      <div class="card-title">Trigger Payment</div>
+
+      <label>
+        <span class="label-text">Agent ID</span>
+        <input id="agent-id" type="text" placeholder="Paste agent ID from SOLAI extension" />
+      </label>
+
+      <label>
+        <span class="label-text">Recipient Address</span>
+        <input id="recipient" type="text" placeholder="Solana wallet address (base58)" />
+      </label>
+
+      <div class="row">
+        <label>
+          <span class="label-text">Amount (SOL)</span>
+          <input id="amount" type="number" step="0.0001" min="0.0001" placeholder="0.001" value="0.001" />
+        </label>
+        <label>
+          <span class="label-text">Memo (optional)</span>
+          <input id="memo" type="text" placeholder="Test payment" value="Test payment" />
+        </label>
+      </div>
+
+      <button class="btn-primary" id="pay-btn" onclick="triggerPay()">
+        Send via Agent Wallet
+      </button>
+
+      <div class="result" id="result"></div>
+    </div>
+
+    <!-- Raw API section -->
+    <div class="card">
+      <div class="card-title">Raw API</div>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        The SOLAI extension injects <code style="color:var(--primary); font-size:11px;">window.solaiAgent</code> into every page.<br/>
+        Call it from the browser console:
+      </div>
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:11px; color:#ccc; line-height:1.8; white-space:pre-wrap;">window.solaiAgent.pay({
+  agentId: "your-agent-id",
+  recipient: "sol-address",
+  amountSol: 0.001,
+  memo: "optional"
+}).then(r => console.log(r.signature))</div>
+    </div>
+
+    <footer>SOLAI Agent Wallet · Local test page · Not deployed</footer>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('ext-status')
+    const agentCard = document.getElementById('agent-info-card')
+    const agentRows = document.getElementById('agent-info-rows')
+
+    function setStatus(type, text) {
+      statusEl.className = 'status-pill ' + type
+      statusEl.innerHTML = `<span class="dot"></span><span>${text}</span>`
+    }
+
+    function checkExtension() {
+      if (window.solaiAgent) {
+        setStatus('ok', 'SOLAI extension detected')
+        agentCard.style.display = 'block'
+        agentRows.innerHTML = `
+          <div class="info-row">
+            <span class="info-label">API</span>
+            <span class="info-value">window.solaiAgent ✓</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">wallet.solana</span>
+            <span class="info-value">${window.solana?.isSOLAI ? 'SOLAI provider ✓' : (window.solana ? 'Other wallet' : 'Not found')}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Connected address</span>
+            <span class="info-value">
+              ${window.solana?.publicKey ? window.solana.publicKey.toBase58().slice(0,8) + '…' + window.solana.publicKey.toBase58().slice(-8) : '—'}
+              ${window.solana?.publicKey ? `<button class="btn-copy" onclick="copyText('${window.solana.publicKey.toBase58()}')">copy</button>` : ''}
+            </span>
+          </div>
+        `
+      } else {
+        setStatus('err', 'SOLAI extension not found — install and refresh')
+      }
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text).catch(() => {})
+    }
+
+    async function triggerPay() {
+      const agentId = document.getElementById('agent-id').value.trim()
+      const recipient = document.getElementById('recipient').value.trim()
+      const amount = parseFloat(document.getElementById('amount').value)
+      const memo = document.getElementById('memo').value.trim()
+      const resultEl = document.getElementById('result')
+      const btn = document.getElementById('pay-btn')
+
+      resultEl.className = 'result'
+      resultEl.style.display = 'none'
+
+      if (!agentId) { showError('Enter an Agent ID'); return }
+      if (!recipient) { showError('Enter a recipient address'); return }
+      if (!amount || amount <= 0) { showError('Enter a valid amount'); return }
+      if (!window.solaiAgent) { showError('SOLAI extension not detected. Install it and refresh this page.'); return }
+
+      btn.disabled = true
+      btn.innerHTML = '<span class="spinner"></span>Sending…'
+
+      try {
+        const result = await window.solaiAgent.pay({ agentId, recipient, amountSol: amount, memo: memo || undefined })
+        const sig = result.signature
+        const shortSig = sig.slice(0, 8) + '…' + sig.slice(-8)
+        const explorerUrl = `https://explorer.solana.com/tx/${sig}`
+        resultEl.className = 'result success'
+        resultEl.innerHTML = `
+          <div style="font-weight:700; margin-bottom:6px;">✓ Payment sent!</div>
+          <div style="margin-bottom:4px; color:rgba(85,255,136,0.7); font-size:11px;">Transaction signature</div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            <code style="font-family:monospace; font-size:11px; word-break:break-all;">${sig}</code>
+            <button class="btn-copy" onclick="copyText('${sig}')">copy</button>
+          </div>
+          <div style="margin-top:10px;">
+            <a class="sig-link" href="${explorerUrl}" target="_blank">View on Solana Explorer ↗</a>
+          </div>
+        `
+        resultEl.style.display = 'block'
+      } catch (e) {
+        showError(e.message || 'Unknown error')
+      } finally {
+        btn.disabled = false
+        btn.textContent = 'Send via Agent Wallet'
+      }
+    }
+
+    function showError(msg) {
+      const resultEl = document.getElementById('result')
+      resultEl.className = 'result error'
+      resultEl.innerHTML = `<strong>Error:</strong> ${msg}`
+      resultEl.style.display = 'block'
+    }
+
+    // Wait a moment for content script to inject
+    setTimeout(checkExtension, 400)
+  </script>
+</body>
+</html>

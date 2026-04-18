@@ -67,6 +67,7 @@ export default function CreateWallet() {
             placeholder="Min 8 characters"
             value={password}
             onChange={e => { setPassword(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && handleGenerate()}
           />
           <Input
             label="Confirm Password"
@@ -75,6 +76,7 @@ export default function CreateWallet() {
             value={confirm}
             onChange={e => { setConfirm(e.target.value); setError('') }}
             error={error}
+            onKeyDown={e => e.key === 'Enter' && handleGenerate()}
           />
         </div>
         {password.length > 0 && (

@@ -102,6 +102,7 @@ export default function BatchSendScreen() {
                 placeholder={"7xKdABC123... 0.05\n9mNpXYZ789... 0.1\nEtc..."}
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && e.ctrlKey && handleParse()}
               />
               <button
                 onClick={handleParse}

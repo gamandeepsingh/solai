@@ -271,7 +271,7 @@ export default function ReceiveScreen() {
             ) : (
               <div className="flex flex-col gap-2">
                 {myStealthAddresses.map(s => {
-                  const bals = stealthBalances[s.publicKey]
+                  const bals = stealthBalances[s.publicKey] ?? null
                   const hasAny = hasFunds(bals)
                   return (
                     <div key={s.publicKey} className="card-bg rounded-3xl overflow-hidden">
@@ -300,7 +300,7 @@ export default function ReceiveScreen() {
 
                       {/* Balances */}
                       <div className="px-4 pb-3">
-                        {bals === null ? (
+                        {bals == null ? (
                           <div className="flex items-center gap-1.5 py-1">
                             <Spinner size="sm" />
                             <span className="text-[10px] opacity-30">Loading balances…</span>
@@ -403,6 +403,7 @@ export default function ReceiveScreen() {
                         placeholder="Enter your wallet password"
                         value={genPassword}
                         onChange={e => { setGenPassword(e.target.value); setGenError('') }}
+                        onKeyDown={e => e.key === 'Enter' && handleGenerate()}
                       />
                     </label>
                     {genError && <p className="text-xs text-red-400">{genError}</p>}
@@ -453,6 +454,7 @@ export default function ReceiveScreen() {
                   placeholder="Enter your wallet password"
                   value={collectPassword}
                   onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleCollect()}
                 />
               </label>
               {collectError && <p className="text-xs text-red-400">{collectError}</p>}

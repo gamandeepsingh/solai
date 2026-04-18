@@ -81,6 +81,7 @@ export default function ConnectLedger() {
                 className="rounded-xl px-3 py-2.5 text-sm bg-[var(--color-card)] border border-[var(--color-border)] outline-none focus:border-primary/60"
                 value={name}
                 onChange={e => setName(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleConnect()}
                 placeholder="Ledger 1"
               />
             </label>

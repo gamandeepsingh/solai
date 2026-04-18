@@ -3,7 +3,8 @@
 ;(globalThis as any).window = globalThis
 
 import nacl from 'tweetnacl'
-import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
+import { PublicKey } from '@solana/web3.js'
+import { sendSol, sendUsdc, sendUsdt, sendSplToken, getSolBalance, getAllSplTokenBalances } from '../lib/solana'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
@@ -16,6 +17,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('balance-refresh', { periodInMinutes: 1 })
   chrome.alarms.create('scheduler-tick', { periodInMinutes: 1 })
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
+  chrome.alarms.create('inactivity-check', { periodInMinutes: 360 }) // every 6 hours
 })
 
 chrome.notifications.onClicked.addListener(() => {
@@ -258,6 +260,81 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       }
 
       await setLocal('conditionalOrders', updatedOrders)
+    } catch {}
+  }
+
+  if (alarm.name === 'inactivity-check') {
+    const guard = await getLocal('inactivityGuard')
+    if (!guard?.enabled || !guard.recipientAddress) return
+
+    const now = Date.now()
+    const daysSince = (now - (guard.lastActivityAt || now)) / 86_400_000
+    const warningThreshold = guard.inactivityDays - 7
+
+    if (daysSince < warningThreshold) return
+
+    const daysLeft = Math.max(0, Math.ceil(guard.inactivityDays - daysSince))
+    const hoursSinceWarn = (now - (guard.lastWarnedAt ?? 0)) / 3_600_000
+
+    // Still in warning window — notify once per 24h
+    if (daysLeft > 0) {
+      if (hoursSinceWarn >= 24) {
+        chrome.notifications.create(`inactivity-warn-${now}`, {
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+          title: 'Wallet Inactivity Warning',
+          message: `Auto-sweep in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Open SOLAI to reset the timer.`,
+        })
+        await setLocal('inactivityGuard', { ...guard, lastWarnedAt: now })
+      }
+      return
+    }
+
+    // Past deadline
+    const keypair = await getSessionKeypair()
+    if (!keypair) {
+      // Session expired — mark pending, notify
+      if (hoursSinceWarn >= 24) {
+        chrome.notifications.create(`inactivity-pending-${now}`, {
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+          title: 'Auto-Sweep Pending',
+          message: 'Inactivity period exceeded. Unlock SOLAI to complete the sweep or cancel.',
+        })
+        await setLocal('inactivityGuard', { ...guard, pendingSweep: true, lastWarnedAt: now })
+      }
+      return
+    }
+
+    // Execute sweep
+    try {
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      const pubkey = new PublicKey(keypair.publicKey).toBase58()
+      const SOL_FEE_RESERVE = 0.01
+
+      const solBalance = await getSolBalance(pubkey, network)
+      if (solBalance > SOL_FEE_RESERVE + 0.001) {
+        const sig = await sendSol(keypair, guard.recipientAddress, solBalance - SOL_FEE_RESERVE, network)
+        await logTx({ sig, type: 'send', timestamp: now, amount: solBalance - SOL_FEE_RESERVE, token: 'SOL', toOrFrom: guard.recipientAddress, status: 'success', network })
+      }
+
+      const splTokens = await getAllSplTokenBalances(pubkey, network)
+      for (const token of splTokens) {
+        if (token.amount > 0) {
+          try {
+            const sig = await sendSplToken(keypair, guard.recipientAddress, token.amount, token.mint, network, token.decimals)
+            await logTx({ sig, type: 'send', timestamp: Date.now(), amount: token.amount, token: token.mint.slice(0, 6), toOrFrom: guard.recipientAddress, status: 'success', network })
+          } catch {}
+        }
+      }
+
+      await setLocal('inactivityGuard', { ...guard, enabled: false, pendingSweep: false, lastActivityAt: now })
+      chrome.notifications.create(`inactivity-swept-${now}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: 'Wallet Swept',
+        message: `All tokens sent to ${guard.recipientAddress.slice(0, 8)}… due to inactivity.`,
+      })
     } catch {}
   }
 })

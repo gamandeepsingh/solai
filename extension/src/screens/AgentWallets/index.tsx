@@ -85,6 +85,11 @@ function AgentCard({ agent, onToggle, onEdit, onFund, onCollect, onDelete }: Age
             )}
           </div>
           <p className="text-[10px] font-mono opacity-40 mt-0.5">{truncate(agent.publicKey)}</p>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="text-[9px] opacity-30">ID:</span>
+            <span className="text-[9px] font-mono opacity-30">{agent.id.slice(0, 8)}…</span>
+            <CopyButton text={agent.id} className="!px-1.5 !py-0 !text-[9px]" />
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <CopyButton text={agent.publicKey} />
@@ -389,6 +394,7 @@ export default function AgentWalletsScreen() {
                   placeholder="Enter your wallet password"
                   value={createPassword}
                   onChange={e => { setCreatePassword(e.target.value); setCreateError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleCreate()}
                 />
               </label>
               {createError && <p className="text-xs text-red-400">{createError}</p>}
@@ -495,6 +501,7 @@ export default function AgentWalletsScreen() {
                   placeholder="Enter your wallet password"
                   value={collectPassword}
                   onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleCollect()}
                 />
               </label>
               {collectError && <p className="text-xs text-red-400">{collectError}</p>}

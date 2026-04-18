@@ -27,6 +27,14 @@ type LocalData = {
   stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
   agentWallets: AgentWallet[]
   watchlist: string[]
+  inactivityGuard: {
+    enabled: boolean
+    recipientAddress: string
+    inactivityDays: number
+    lastActivityAt: number
+    lastWarnedAt?: number
+    pendingSweep?: boolean
+  }
 }
 
 type SyncData = {

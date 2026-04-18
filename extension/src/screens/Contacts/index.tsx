@@ -197,14 +197,14 @@ export default function ContactsScreen() {
         <div className="flex flex-col gap-3">
           <div className="flex gap-2">
             <div className="flex-1">
-              <Input label="Name" placeholder="Friend's name" value={name} onChange={e => { setName(e.target.value); setError('') }} />
+              <Input label="Name" placeholder="Friend's name" value={name} onChange={e => { setName(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
             </div>
             <div style={{ width: 72 }}>
               <Input label="Emoji" placeholder="👤" value={emoji} onChange={e => setEmoji(e.target.value)} />
             </div>
           </div>
-          <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} />
-          <Input label="Note (optional)" placeholder="e.g. Work wallet" value={note} onChange={e => setNote(e.target.value)} error={error} />
+          <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
+          <Input label="Note (optional)" placeholder="e.g. Work wallet" value={note} onChange={e => setNote(e.target.value)} error={error} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
           <Button fullWidth isLoading={isSaving} onClick={handleAdd}>Save Contact</Button>
         </div>
       </Modal>

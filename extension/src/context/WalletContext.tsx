@@ -358,6 +358,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     if (Object.keys(agentMap).length > 0) await saveAgentSession(agentMap)
     setAgentWallets(agentList)
+
+    // Reset inactivity timer on unlock
+    const guard = await getLocal('inactivityGuard')
+    if (guard?.enabled) {
+      await setLocal('inactivityGuard', { ...guard, lastActivityAt: Date.now(), pendingSweep: false })
+    }
   }, [])
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
