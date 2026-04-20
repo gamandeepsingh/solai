@@ -5,10 +5,18 @@ import type { Network } from '../types/wallet'
 import type { NFTAsset } from '../types/nft'
 import { USDC_MINT, USDT_MINT } from './tokens'
 
+const HELIUS_RPC_MAINNET = import.meta.env.VITE_HELIUS_RPC_KEY
+  ? 'https://mainnet.helius-rpc.com/'
+  : null
+
 const ENDPOINTS: Record<Network, string> = {
-  mainnet: import.meta.env.VITE_RPC_MAINNET || 'https://api.mainnet-beta.solana.com',
+  mainnet: import.meta.env.VITE_RPC_MAINNET || HELIUS_RPC_MAINNET || 'https://api.mainnet-beta.solana.com',
   devnet:  import.meta.env.VITE_RPC_DEVNET  || 'https://api.devnet.solana.com',
 }
+
+const HELIUS_HTTP_HEADERS: Record<string, string> | undefined = import.meta.env.VITE_HELIUS_RPC_KEY
+  ? { 'api-key': import.meta.env.VITE_HELIUS_RPC_KEY }
+  : undefined
 
 let _connection: Connection | null = null
 let _currentNetwork: Network = 'mainnet'
@@ -16,7 +24,10 @@ let _currentNetwork: Network = 'mainnet'
 export function getConnection(network: Network, customRpc?: string): Connection {
   const endpoint = customRpc || ENDPOINTS[network]
   if (_connection && _currentNetwork === network && !customRpc) return _connection
-  _connection = new Connection(endpoint, 'confirmed')
+  _connection = new Connection(endpoint, {
+    commitment: 'confirmed',
+    ...(network === 'mainnet' && HELIUS_HTTP_HEADERS && !customRpc && { httpHeaders: HELIUS_HTTP_HEADERS }),
+  })
   _currentNetwork = network
   return _connection
 }
@@ -71,7 +82,7 @@ export async function sendSol(
   tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
   tx.feePayer = solanaKeypair.publicKey
   const simResult = await conn.simulateTransaction(tx)
-  if (simResult.value.err) throw new Error(`Transaction simulation failed: ${JSON.stringify(simResult.value.err)}`)
+  if (simResult.value.err) throw new Error('Transaction would fail on-chain — check your balance and try again')
   return sendAndConfirmTransaction(conn, tx, [solanaKeypair])
 }
 
@@ -101,7 +112,7 @@ export async function sendSplToken(
   tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
   tx.feePayer = solanaKeypair.publicKey
   const simResult = await conn.simulateTransaction(tx)
-  if (simResult.value.err) throw new Error(`Transaction simulation failed: ${JSON.stringify(simResult.value.err)}`)
+  if (simResult.value.err) throw new Error('Transaction would fail on-chain — check your balance and try again')
   return sendAndConfirmTransaction(conn, tx, [solanaKeypair])
 }
 
@@ -111,6 +122,64 @@ export async function sendUsdc(keypair: nacl.SignKeyPair, recipient: string, amo
 
 export async function sendUsdt(keypair: nacl.SignKeyPair, recipient: string, amount: number, network: Network): Promise<string> {
   return sendSplToken(keypair, recipient, amount, USDT_MINT[network], network)
+}
+
+export async function buildUnsignedSolTransfer(
+  from: string,
+  to: string,
+  amount: number,
+  network: Network
+): Promise<{ txBytes: Uint8Array }> {
+  if (amount <= 0) throw new Error('Amount must be greater than 0')
+  const conn = getConnection(network)
+  const fromKey = new PublicKey(from)
+  const tx = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: fromKey,
+      toPubkey: new PublicKey(to),
+      lamports: Math.round(amount * LAMPORTS_PER_SOL),
+    })
+  )
+  tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+  tx.feePayer = fromKey
+  return { txBytes: tx.serialize({ requireAllSignatures: false, verifySignatures: false }) }
+}
+
+export async function buildUnsignedSplTransfer(
+  from: string,
+  to: string,
+  amount: number,
+  mintAddress: string,
+  network: Network,
+  decimals = 6
+): Promise<{ txBytes: Uint8Array }> {
+  if (amount <= 0) throw new Error('Amount must be greater than 0')
+  const conn = getConnection(network)
+  const fromKey = new PublicKey(from)
+  const mintKey = new PublicKey(mintAddress)
+  const fromAta = await getAssociatedTokenAddress(mintKey, fromKey)
+  const toKey = new PublicKey(to)
+  const toAta = await getAssociatedTokenAddress(mintKey, toKey)
+  const tx = new Transaction()
+  try {
+    await getAccount(conn, toAta)
+  } catch {
+    tx.add(createAssociatedTokenAccountInstruction(fromKey, toAta, toKey, mintKey))
+  }
+  tx.add(createTransferInstruction(fromAta, toAta, fromKey, BigInt(Math.round(amount * 10 ** decimals))))
+  tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+  tx.feePayer = fromKey
+  return { txBytes: tx.serialize({ requireAllSignatures: false, verifySignatures: false }) }
+}
+
+export async function broadcastSignedTransaction(
+  signedBytes: Uint8Array,
+  network: Network
+): Promise<string> {
+  const conn = getConnection(network)
+  const sig = await conn.sendRawTransaction(signedBytes, { skipPreflight: false })
+  await conn.confirmTransaction(sig, 'confirmed')
+  return sig
 }
 
 export async function estimateFee(network: Network): Promise<number> {
@@ -133,19 +202,21 @@ export async function getAllSplTokenBalances(
     }))
 }
 
-const HELIUS_RPC_URL = import.meta.env.VITE_HELIUS_RPC_KEY
-  ? `https://mainnet.helius-rpc.com/?api-key=${import.meta.env.VITE_HELIUS_RPC_KEY}`
-  : null
+const HELIUS_KEY = import.meta.env.VITE_HELIUS_RPC_KEY ?? null
+const HELIUS_BASE_URL = 'https://mainnet.helius-rpc.com/'
 
 export async function getNFTs(
   publicKey: string,
   network: Network
 ): Promise<NFTAsset[]> {
-  if (HELIUS_RPC_URL && network === 'mainnet') {
+  if (HELIUS_KEY && network === 'mainnet') {
     try {
-      const res = await fetch(HELIUS_RPC_URL, {
+      const res = await fetch(HELIUS_BASE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': HELIUS_KEY,
+        },
         body: JSON.stringify({
           jsonrpc: '2.0', id: 1,
           method: 'getAssetsByOwner',

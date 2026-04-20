@@ -54,6 +54,7 @@ export default function ImportWallet() {
             placeholder="Min 8 characters"
             value={password}
             onChange={e => { setPassword(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && handleImport()}
           />
           <Input
             label="Confirm Password"
@@ -62,6 +63,7 @@ export default function ImportWallet() {
             value={confirm}
             onChange={e => { setConfirm(e.target.value); setError('') }}
             error={error}
+            onKeyDown={e => e.key === 'Enter' && handleImport()}
           />
         </div>
         <Button fullWidth isLoading={isLoading} onClick={handleImport} className="mt-3">

@@ -4,6 +4,7 @@ import nacl from 'tweetnacl'
 import { VersionedTransaction, Transaction, PublicKey } from '@solana/web3.js'
 import Button from '../../components/ui/Button'
 import { useWallet } from '../../context/WalletContext'
+import { LEDGER_DEFAULT_PATH } from '../../lib/ledger'
 
 interface PendingSign {
   type: 'signMessage' | 'signTransaction' | 'signAndSendTransaction'
@@ -17,7 +18,8 @@ interface Props {
 }
 
 export default function SignApprovalScreen({ requestId, onDone }: Props) {
-  const { keypair, network } = useWallet()
+  const { keypair, network, account, isLedgerWallet } = useWallet()
+  const ledgerPath = account?.ledgerPath ?? LEDGER_DEFAULT_PATH
   const [pendingSign, setPendingSign] = useState<PendingSign | null>(null)
   const [messageText, setMessageText] = useState<string | null>(null)
   const [isApproving, setIsApproving] = useState(false)
@@ -44,69 +46,96 @@ export default function SignApprovalScreen({ requestId, onDone }: Props) {
       chrome.tabs.sendMessage(pendingSign.tabId, {
         type: 'SOLAI_SIGN_RESULT',
         requestId,
-        ...result,
+        ...(result.signature         !== undefined && { signature:         result.signature }),
+        ...(result.signedTransaction !== undefined && { signedTransaction: result.signedTransaction }),
+        ...(result.error             !== undefined && { error:             result.error }),
       }).catch(() => {})
     }
     onDone()
     window.close()
   }
 
+  async function sendSignedBytes(signedBytes: Uint8Array) {
+    const endpoint = network === 'devnet'
+      ? 'https://api.devnet.solana.com'
+      : 'https://api.mainnet-beta.solana.com'
+    const b64 = btoa(Array.from(signedBytes).map(b => String.fromCharCode(b)).join(''))
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'sendTransaction',
+        params: [b64, { encoding: 'base64', preflightCommitment: 'confirmed' }],
+      }),
+    })
+    const { result: sig, error: rpcErr } = await res.json()
+    if (rpcErr) throw new Error(rpcErr.message ?? 'Transaction rejected by network')
+    return sig as string
+  }
+
   async function handleApprove() {
-    if (!keypair || !pendingSign) return
+    if (!pendingSign) return
     setIsApproving(true)
     setError('')
 
     try {
-      if (pendingSign.type === 'signMessage') {
-        const msgBytes = new Uint8Array(pendingSign.params.message)
-        const signature = nacl.sign.detached(msgBytes, keypair.secretKey)
-        await pushResult({ signature: Array.from(signature) })
-        return
+      if (isLedgerWallet) {
+        await handleApproveLedger()
+      } else {
+        await handleApproveSoftware()
       }
-
-      // Sign transaction bytes
-      const txBytes = new Uint8Array(pendingSign.params.transaction)
-      const signer = { publicKey: new PublicKey(keypair.publicKey), secretKey: keypair.secretKey }
-      let signedBytes: Uint8Array
-      try {
-        const tx = VersionedTransaction.deserialize(txBytes)
-        tx.sign([signer])
-        signedBytes = tx.serialize()
-      } catch {
-        const tx = Transaction.from(txBytes)
-        tx.partialSign(signer)
-        signedBytes = tx.serialize({ requireAllSignatures: false })
-      }
-
-      if (pendingSign.type === 'signTransaction') {
-        await pushResult({ signedTransaction: Array.from(signedBytes) })
-        return
-      }
-
-      // signAndSendTransaction — submit to RPC
-      const endpoint = network === 'devnet'
-        ? 'https://api.devnet.solana.com'
-        : 'https://api.mainnet-beta.solana.com'
-      const b64 = btoa(Array.from(signedBytes).map(b => String.fromCharCode(b)).join(''))
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 1,
-          method: 'sendTransaction',
-          params: [b64, { encoding: 'base64', preflightCommitment: 'confirmed' }],
-        }),
-      })
-      const { result: sig, error: rpcErr } = await res.json()
-      if (rpcErr) {
-        setError(rpcErr.message ?? 'Transaction rejected by network')
-        setIsApproving(false)
-        return
-      }
-      await pushResult({ signature: sig })
     } catch (e: any) {
-      await pushResult({ error: e?.message ?? 'Signing failed' })
+      setError(e?.message ?? 'Signing failed')
+      setIsApproving(false)
     }
+  }
+
+  async function handleApproveSoftware() {
+    if (!keypair || !pendingSign) return
+    if (pendingSign.type === 'signMessage') {
+      const msgBytes = new Uint8Array(pendingSign.params.message)
+      const signature = nacl.sign.detached(msgBytes, keypair.secretKey)
+      await pushResult({ signature: Array.from(signature) })
+      return
+    }
+    const txBytes = new Uint8Array(pendingSign.params.transaction)
+    const signer = { publicKey: new PublicKey(keypair.publicKey), secretKey: keypair.secretKey }
+    let signedBytes: Uint8Array
+    try {
+      const tx = VersionedTransaction.deserialize(txBytes)
+      tx.sign([signer])
+      signedBytes = tx.serialize()
+    } catch {
+      const tx = Transaction.from(txBytes)
+      tx.partialSign(signer)
+      signedBytes = tx.serialize({ requireAllSignatures: false })
+    }
+    if (pendingSign.type === 'signTransaction') {
+      await pushResult({ signedTransaction: Array.from(signedBytes) })
+      return
+    }
+    const sig = await sendSignedBytes(signedBytes)
+    await pushResult({ signature: sig })
+  }
+
+  async function handleApproveLedger() {
+    if (!pendingSign || !account) return
+    const { signMessageWithLedger, signTransactionBytesWithLedger } = await import('../../lib/ledger')
+    if (pendingSign.type === 'signMessage') {
+      const msgBytes = new Uint8Array(pendingSign.params.message)
+      const signature = await signMessageWithLedger(msgBytes, ledgerPath)
+      await pushResult({ signature: Array.from(signature) })
+      return
+    }
+    const txBytes = new Uint8Array(pendingSign.params.transaction)
+    const signedBytes = await signTransactionBytesWithLedger(txBytes, account.publicKey, ledgerPath)
+    if (pendingSign.type === 'signTransaction') {
+      await pushResult({ signedTransaction: Array.from(signedBytes) })
+      return
+    }
+    const sig = await sendSignedBytes(signedBytes)
+    await pushResult({ signature: sig })
   }
 
   async function handleReject() {
@@ -179,6 +208,15 @@ export default function SignApprovalScreen({ requestId, onDone }: Props) {
               ? 'The signed transaction will be sent to the Solana network immediately.'
               : 'The signed transaction will be returned to the requesting app.'}
           </p>
+        </div>
+      )}
+
+      {isLedgerWallet && isApproving && !error && (
+        <div className="w-full rounded-2xl bg-primary/10 border border-primary/20 px-4 py-3 flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+          </svg>
+          <p className="text-xs text-primary">Confirm on your Ledger device…</p>
         </div>
       )}
 

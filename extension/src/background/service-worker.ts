@@ -3,7 +3,8 @@
 ;(globalThis as any).window = globalThis
 
 import nacl from 'tweetnacl'
-import { sendSol, sendUsdc, sendUsdt } from '../lib/solana'
+import { PublicKey } from '@solana/web3.js'
+import { sendSol, sendUsdc, sendUsdt, sendSplToken, getSolBalance, getAllSplTokenBalances } from '../lib/solana'
 import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
@@ -16,6 +17,11 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('balance-refresh', { periodInMinutes: 1 })
   chrome.alarms.create('scheduler-tick', { periodInMinutes: 1 })
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
+  chrome.alarms.create('inactivity-check', { periodInMinutes: 360 }) // every 6 hours
+})
+
+chrome.notifications.onClicked.addListener(() => {
+  chrome.action.openPopup?.().catch(() => {})
 })
 
 async function getAgentKeypair(agentId: string): Promise<nacl.SignKeyPair | null> {
@@ -45,6 +51,9 @@ async function getSessionKeypair(): Promise<nacl.SignKeyPair | null> {
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'balance-refresh') {
+    const notifSetting = (await chrome.storage.sync.get('notificationsEnabled') as any)?.notificationsEnabled
+    const notifEnabled = notifSetting !== false
+
     const [wallets, activeId, legacyKeystore] = await Promise.all([
       getLocal('wallets'),
       getLocal('activeWalletId'),
@@ -76,7 +85,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       const newSolBalance = result.value / 1_000_000_000
 
       // Notify if SOL balance increased (skip on very first cache population)
-      if (prevSolBalance !== undefined && newSolBalance > prevSolBalance + 0.000001) {
+      if (notifEnabled && prevSolBalance !== undefined && newSolBalance > prevSolBalance + 0.000001) {
         const received = (newSolBalance - prevSolBalance).toFixed(6)
         chrome.notifications.create(`recv-sol-${Date.now()}`, {
           type: 'basic',
@@ -118,7 +127,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         const amount = Number(info.tokenAmount.uiAmount ?? 0)
         if (amount > 0) newSplBalances[mint] = amount
 
-        if (!isFirstSplCheck) {
+        if (notifEnabled && !isFirstSplCheck) {
           const prev = cachedSpl[mint] ?? 0
           if (amount > prev + 0.000001) {
             const symbol = mintToSymbol[mint] ?? 'Token'
@@ -163,7 +172,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icons/icon128.png'),
             title: 'Scheduled Payment Sent',
-            message: `Sent ${job.action.amount} ${job.action.token} to ${job.action.recipientLabel}`,
+            message: `${job.action.amount} ${job.action.token} sent successfully`,
           })
         } catch (e: any) {
           chrome.notifications.create(`scheduled-err-${job.id}-${now}`, {
@@ -253,6 +262,81 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await setLocal('conditionalOrders', updatedOrders)
     } catch {}
   }
+
+  if (alarm.name === 'inactivity-check') {
+    const guard = await getLocal('inactivityGuard')
+    if (!guard?.enabled || !guard.recipientAddress) return
+
+    const now = Date.now()
+    const daysSince = (now - (guard.lastActivityAt || now)) / 86_400_000
+    const warningThreshold = guard.inactivityDays - 7
+
+    if (daysSince < warningThreshold) return
+
+    const daysLeft = Math.max(0, Math.ceil(guard.inactivityDays - daysSince))
+    const hoursSinceWarn = (now - (guard.lastWarnedAt ?? 0)) / 3_600_000
+
+    // Still in warning window — notify once per 24h
+    if (daysLeft > 0) {
+      if (hoursSinceWarn >= 24) {
+        chrome.notifications.create(`inactivity-warn-${now}`, {
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+          title: 'Wallet Inactivity Warning',
+          message: `Auto-sweep in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. Open SOLAI to reset the timer.`,
+        })
+        await setLocal('inactivityGuard', { ...guard, lastWarnedAt: now })
+      }
+      return
+    }
+
+    // Past deadline
+    const keypair = await getSessionKeypair()
+    if (!keypair) {
+      // Session expired — mark pending, notify
+      if (hoursSinceWarn >= 24) {
+        chrome.notifications.create(`inactivity-pending-${now}`, {
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+          title: 'Auto-Sweep Pending',
+          message: 'Inactivity period exceeded. Unlock SOLAI to complete the sweep or cancel.',
+        })
+        await setLocal('inactivityGuard', { ...guard, pendingSweep: true, lastWarnedAt: now })
+      }
+      return
+    }
+
+    // Execute sweep
+    try {
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      const pubkey = new PublicKey(keypair.publicKey).toBase58()
+      const SOL_FEE_RESERVE = 0.01
+
+      const solBalance = await getSolBalance(pubkey, network)
+      if (solBalance > SOL_FEE_RESERVE + 0.001) {
+        const sig = await sendSol(keypair, guard.recipientAddress, solBalance - SOL_FEE_RESERVE, network)
+        await logTx({ sig, type: 'send', timestamp: now, amount: solBalance - SOL_FEE_RESERVE, token: 'SOL', toOrFrom: guard.recipientAddress, status: 'success', network })
+      }
+
+      const splTokens = await getAllSplTokenBalances(pubkey, network)
+      for (const token of splTokens) {
+        if (token.amount > 0) {
+          try {
+            const sig = await sendSplToken(keypair, guard.recipientAddress, token.amount, token.mint, network, token.decimals)
+            await logTx({ sig, type: 'send', timestamp: Date.now(), amount: token.amount, token: token.mint.slice(0, 6), toOrFrom: guard.recipientAddress, status: 'success', network })
+          } catch {}
+        }
+      }
+
+      await setLocal('inactivityGuard', { ...guard, enabled: false, pendingSweep: false, lastActivityAt: now })
+      chrome.notifications.create(`inactivity-swept-${now}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: 'Wallet Swept',
+        message: `All tokens sent to ${guard.recipientAddress.slice(0, 8)}… due to inactivity.`,
+      })
+    } catch {}
+  }
 })
 
 const pendingConnectRequests: Map<string, { resolve: (r: any) => void; origin: string }> = new Map()
@@ -286,14 +370,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { requestId, params } = message
 
     ;(async () => {
-      // If this origin was previously approved, return the public key silently
+      // If this origin was previously approved and not expired, return the public key silently
+      const ORIGIN_EXPIRY_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
       const approvedOrigins = (await getLocal('approvedOrigins')) ?? []
-      if (approvedOrigins.some(a => a.origin === params.origin)) {
+      const approvedEntry = approvedOrigins.find(a =>
+        a.origin === params.origin &&
+        Date.now() - new Date(a.connectedAt).getTime() < ORIGIN_EXPIRY_MS
+      )
+      if (approvedEntry) {
+        // Update lastUsedAt
+        const updated = approvedOrigins.map(a =>
+          a.origin === params.origin ? { ...a, lastUsedAt: new Date().toISOString() } : a
+        )
+        await setLocal('approvedOrigins', updated as any)
         const [wallets, activeId, legacyKs] = await Promise.all([
           getLocal('wallets'), getLocal('activeWalletId'), getLocal('keystore'),
         ])
         const wallet = wallets?.find(w => w.id === activeId) ?? wallets?.[0]
-        const pk = wallet?.keystore.publicKey ?? legacyKs?.publicKey
+        const pk = wallet?.keystore?.publicKey ?? wallet?.publicKey ?? legacyKs?.publicKey
         if (pk) { sendResponse({ publicKey: pk }); return }
       }
 
@@ -349,7 +443,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       SOLAI_SIGNTRANSACTION: 'signTransaction',
       SOLAI_SIGNANDSENDTRANSACTION: 'signAndSendTransaction',
     }
-    const requestId: string = message.requestId ?? Math.random().toString(36).slice(2)
+    const requestId: string = message.requestId ?? crypto.randomUUID()
     const tabId: number | undefined = sender.tab?.id
 
     ;(async () => {
@@ -391,7 +485,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (g.dailyBudgetSol > 0 && agent.stats.dailySpentSol + amountSol > g.dailyBudgetSol) {
         sendResponse({ error: `Daily budget exceeded (${agent.stats.dailySpentSol.toFixed(4)}/${g.dailyBudgetSol} SOL used)` }); return
       }
-      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => origin?.startsWith(o))) {
+      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => {
+        try { return new URL(origin).hostname === new URL(o).hostname } catch { return false }
+      })) {
         sendResponse({ error: 'Origin not in allowlist' }); return
       }
       if (g.cooldownMs > 0 && agent.stats.lastPaymentAt > 0 && now - agent.stats.lastPaymentAt < g.cooldownMs) {

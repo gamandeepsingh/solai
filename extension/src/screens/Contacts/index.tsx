@@ -26,6 +26,7 @@ export default function ContactsScreen() {
   const { toast } = useToast()
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
+  const [emoji, setEmoji] = useState('')
   const [address, setAddress] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
@@ -61,9 +62,9 @@ export default function ContactsScreen() {
     if (dup) return setError(`Address already saved as "${dup.name}"`)
     setIsSaving(true)
     try {
-      await add({ name: name.trim(), address, note: note.trim() || undefined })
+      await add({ name: name.trim(), emoji: emoji.trim() || undefined, address, note: note.trim() || undefined })
       setShowAdd(false)
-      setName(''); setAddress(''); setNote(''); setError('')
+      setName(''); setEmoji(''); setAddress(''); setNote(''); setError('')
     } catch {
       setError('Failed to save contact')
     } finally {
@@ -124,7 +125,7 @@ export default function ContactsScreen() {
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-                      {c.name[0].toUpperCase()}
+                      {c.emoji || c.name[0].toUpperCase()}
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{c.name}</p>
@@ -194,9 +195,16 @@ export default function ContactsScreen() {
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Contact">
         <div className="flex flex-col gap-3">
-          <Input label="Name" placeholder="Friend's name" value={name} onChange={e => { setName(e.target.value); setError('') }} />
-          <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} />
-          <Input label="Note (optional)" placeholder="e.g. Work wallet" value={note} onChange={e => setNote(e.target.value)} error={error} />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <Input label="Name" placeholder="Friend's name" value={name} onChange={e => { setName(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
+            </div>
+            <div style={{ width: 72 }}>
+              <Input label="Emoji" placeholder="👤" value={emoji} onChange={e => setEmoji(e.target.value)} />
+            </div>
+          </div>
+          <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
+          <Input label="Note (optional)" placeholder="e.g. Work wallet" value={note} onChange={e => setNote(e.target.value)} error={error} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
           <Button fullWidth isLoading={isSaving} onClick={handleAdd}>Save Contact</Button>
         </div>
       </Modal>

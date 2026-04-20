@@ -6,6 +6,7 @@ import { getLocal, setLocal, removeLocal, getSync, setSync, getSession, setSessi
 import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair, getMnemonicFromKeystore, validateMnemonic } from '../lib/wallet'
 import { getSolBalance, sendSol } from '../lib/solana'
 import type { AgentWallet, AgentGuardrails } from '../types/agent'
+import { LEDGER_DEFAULT_PATH } from '../lib/ledger'
 
 const SESSION_TTL = 30 * 60 * 1000
 const COLLECT_FEE_RESERVE = 0.000005
@@ -56,6 +57,8 @@ interface WalletContextValue {
   deleteAgentWallet: (agentId: string) => Promise<void>
   fundAgent: (agentId: string, amountSol: number) => Promise<string>
   collectFromAgent: (agentId: string, password: string) => Promise<string>
+  isLedgerWallet: boolean
+  addLedgerWallet: (name: string) => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue>(null!)
@@ -86,11 +89,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [stealthAddresses, setStealthAddresses] = useState<StealthAddress[]>([])
   const [agentWallets, setAgentWallets] = useState<AgentWallet[]>([])
   const keypairsMapRef = useRef<Record<string, nacl.SignKeyPair>>({})
+  const addingWalletRef = useRef(false)
 
   const account = useMemo<WalletAccount | null>(() => {
     const entry = accounts.find(a => a.id === activeId)
     if (!entry) return null
-    return { name: entry.name, publicKey: entry.keystore.publicKey, keystore: entry.keystore }
+    const publicKey = entry.type === 'ledger'
+      ? (entry.publicKey ?? '')
+      : (entry.keystore?.publicKey ?? '')
+    return {
+      name: entry.name,
+      publicKey,
+      keystore: entry.keystore,
+      isLedger: entry.type === 'ledger',
+      ledgerPath: entry.ledgerPath ?? LEDGER_DEFAULT_PATH,
+    }
+  }, [accounts, activeId])
+
+  const isLedgerWallet = useMemo(() => {
+    return accounts.find(a => a.id === activeId)?.type === 'ledger'
   }, [accounts, activeId])
 
   const init = useCallback(async () => {
@@ -140,7 +157,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (restoredMap && restoredMap[savedActiveId]) {
+    const activeEntry = wallets.find(w => w.id === savedActiveId)
+    if (activeEntry?.type === 'ledger') {
+      setIsLocked(false)
+    } else if (restoredMap && restoredMap[savedActiveId]) {
       keypairsMapRef.current = restoredMap
       setKeypair(restoredMap[savedActiveId])
       setIsLocked(false)
@@ -190,6 +210,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addWallet = useCallback(async (params: AddWalletParams): Promise<string> => {
+    if (addingWalletRef.current) throw new Error('Already adding a wallet')
+    addingWalletRef.current = true
+    try {
     const wallets = await getLocal('wallets') ?? []
     if (!wallets.length) throw new Error('No existing wallet')
 
@@ -207,6 +230,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await saveSession(keypairsMapRef.current)
     setAccounts(updated)
     return mnemonic
+    } finally {
+      addingWalletRef.current = false
+    }
   }, [])
 
   const switchWallet = useCallback(async (id: string) => {
@@ -269,7 +295,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const activeEntry = wallets.find(w => w.id === currentActiveId) ?? wallets[0]
     const mnemonic = await getMnemonicFromKeystore(activeEntry.keystore, password)
     const existing = (await getLocal('stealthAddresses') ?? []).filter(s => s.walletId === activeEntry.id)
-    const nextIndex = existing.length > 0 ? Math.max(...existing.map(s => s.index)) + 1 : 1
+    const gap = Math.floor(Math.random() * 50) + 1
+    const nextIndex = existing.length > 0 ? Math.max(...existing.map(s => s.index)) + gap : gap
     const kp = await mnemonicToKeypair(mnemonic, nextIndex)
     const publicKey = bs58.encode(kp.publicKey)
     const newEntry: StealthAddress = { walletId: activeEntry.id, index: nextIndex, publicKey, label }
@@ -308,6 +335,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallets.length) throw new Error('No wallet found')
     const map: Record<string, nacl.SignKeyPair> = {}
     for (const entry of wallets) {
+      if (entry.type === 'ledger' || !entry.keystore) continue
       map[entry.id] = await unlockKeystore(entry.keystore, password)
     }
     keypairsMapRef.current = map
@@ -330,6 +358,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     if (Object.keys(agentMap).length > 0) await saveAgentSession(agentMap)
     setAgentWallets(agentList)
+
+    // Reset inactivity timer on unlock
+    const guard = await getLocal('inactivityGuard')
+    if (guard?.enabled) {
+      await setLocal('inactivityGuard', { ...guard, lastActivityAt: Date.now(), pendingSweep: false })
+    }
   }, [])
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<void> => {
@@ -432,6 +466,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return sendSol(keypair, agent.publicKey, amountSol, network)
   }, [keypair, network])
 
+  const addLedgerWallet = useCallback(async (name: string): Promise<void> => {
+    const { getLedgerPublicKey } = await import('../lib/ledger')
+    const publicKey = await getLedgerPublicKey(LEDGER_DEFAULT_PATH, true)
+    const wallets = await getLocal('wallets') ?? []
+    const entry = {
+      id: crypto.randomUUID(),
+      name,
+      type: 'ledger' as const,
+      publicKey,
+      ledgerPath: LEDGER_DEFAULT_PATH,
+    }
+    const updated = [...wallets, entry]
+    await setLocal('wallets', updated)
+    await setLocal('activeWalletId', entry.id)
+    setAccounts(updated)
+    setActiveId(entry.id)
+    setKeypair(null)
+    setIsLocked(false)
+  }, [])
+
   const collectFromAgent = useCallback(async (agentId: string, password: string): Promise<string> => {
     const allAgents = await getLocal('agentWallets') ?? []
     const agent = allAgents.find(a => a.id === agentId)
@@ -456,10 +510,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [network])
 
   const lock = useCallback(async () => {
+    for (const kp of Object.values(keypairsMapRef.current)) {
+      kp.secretKey.fill(0)
+    }
     keypairsMapRef.current = {}
     setKeypair(null)
     setIsLocked(true)
     await removeSession('walletSession')
+    await removeSession('agentSession')
   }, [])
 
   const setNetwork = useCallback((n: Network) => {
@@ -478,6 +536,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       agentWallets,
       createAgentWallet, updateAgentGuardrails, toggleAgent, deleteAgentWallet,
       fundAgent, collectFromAgent,
+      isLedgerWallet, addLedgerWallet,
     }}>
       {children}
     </WalletContext.Provider>

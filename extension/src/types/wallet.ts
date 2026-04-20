@@ -11,13 +11,18 @@ export interface EncryptedKeystore {
 export interface WalletEntry {
   id: string
   name: string
-  keystore: EncryptedKeystore
+  type?: 'ledger'
+  keystore?: EncryptedKeystore
+  publicKey?: string
+  ledgerPath?: string
 }
 
 export interface WalletAccount {
   name: string
   publicKey: string
-  keystore: EncryptedKeystore
+  keystore?: EncryptedKeystore
+  isLedger?: boolean
+  ledgerPath?: string
 }
 
 export interface WalletState {

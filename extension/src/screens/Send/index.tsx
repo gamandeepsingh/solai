@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../components/layout/Header'
@@ -10,8 +10,9 @@ import { useBalance } from '../../hooks/useBalance'
 import { validateRecipientAddress } from '../../lib/solana'
 import { logTx } from '../../lib/history'
 import { useWallet } from '../../context/WalletContext'
-import { updateContactInteraction } from '../../lib/contacts'
+import { updateContactInteraction, getContacts } from '../../lib/contacts'
 import type { TokenBalance } from '../../types/tokens'
+import type { Contact } from '../../types/contacts'
 
 type Step = 'address' | 'amount' | 'confirm' | 'done'
 
@@ -52,7 +53,7 @@ export default function SendScreen() {
   const navigate = useNavigate()
   const location = useLocation()
   const prefilled = (location.state as any)?.recipient as string | undefined
-  const { send, isLoading } = useTransaction()
+  const { send, isLoading, awaitingLedger } = useTransaction()
   const { ownedBalances } = useBalance()
   const { network } = useWallet()
 
@@ -64,6 +65,43 @@ export default function SendScreen() {
   const [txSig, setTxSig] = useState('')
   const [addrWarning, setAddrWarning] = useState('')
   const [anomalyWarning, setAnomalyWarning] = useState('')
+  const [showDraftBanner, setShowDraftBanner] = useState(false)
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  useEffect(() => { getContacts().then(setContacts) }, [])
+
+  const DRAFT_KEY = 'sendDraft'
+
+  useEffect(() => {
+    if (prefilled) return
+    chrome.storage.session.get(DRAFT_KEY).then((stored: any) => {
+      const draft = stored[DRAFT_KEY]
+      if (draft?.recipient) setShowDraftBanner(true)
+    })
+  }, [])
+
+  function restoreDraft() {
+    chrome.storage.session.get(DRAFT_KEY).then((stored: any) => {
+      const draft = stored[DRAFT_KEY]
+      if (!draft) return
+      setRecipient(draft.recipient ?? '')
+      setAmount(draft.amount ?? '')
+      if (draft.recipient) setStep('amount')
+      setShowDraftBanner(false)
+      chrome.storage.session.remove(DRAFT_KEY)
+    })
+  }
+
+  function dismissDraft() {
+    setShowDraftBanner(false)
+    chrome.storage.session.remove(DRAFT_KEY)
+  }
+
+  function saveDraft() {
+    if (!recipient && !amount) return
+    chrome.storage.session.set({ [DRAFT_KEY]: { recipient, amount } })
+  }
 
   // Default to SOL if available
   const activeToken = selectedToken ?? ownedBalances.find(b => b.meta.symbol === 'SOL') ?? ownedBalances[0] ?? null
@@ -111,6 +149,7 @@ export default function SendScreen() {
       const sig = await send(recipient, parseFloat(amount), activeToken.meta.symbol)
       setTxSig(sig)
       setStep('done')
+      chrome.storage.session.remove(DRAFT_KEY)
       logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: recipient, status: 'success' })
       updateContactInteraction(recipient).catch(() => {})
     } catch (e: any) {
@@ -122,22 +161,66 @@ export default function SendScreen() {
     <div className="h-full flex flex-col bg-[var(--color-bg)]">
       <Header />
       <div className="flex-1 flex flex-col px-5 pt-2 pb-20 overflow-y-auto">
-        <AnimatePresence mode="wait">
+        {showDraftBanner && (
+            <div className="mb-3 flex items-center gap-2 card-bg rounded-2xl px-3 py-2.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p className="text-xs opacity-60 flex-1">Resume unsaved draft?</p>
+              <button onClick={restoreDraft} className="text-xs text-primary font-semibold">Restore</button>
+              <button onClick={dismissDraft} className="text-xs opacity-30 ml-1">✕</button>
+            </div>
+          )}
+          <AnimatePresence mode="wait">
           {step === 'address' && (
             <motion.div key="address" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4 mt-4">
               <div>
-                <h2 className="text-xl font-bold mb-1">Send</h2>
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-xl font-bold">Send</h2>
+                  <button onClick={() => { saveDraft(); navigate('/batch-send') }} className="text-[10px] text-primary opacity-70 hover:opacity-100 flex items-center gap-1">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    Batch
+                  </button>
+                </div>
                 <p className="text-xs opacity-40">Enter recipient address</p>
               </div>
-              <Input
-                label="Recipient Address"
-                placeholder="Solana wallet address"
-                className="px-3"
-                value={recipient}
-                onChange={e => { setRecipient(e.target.value); setError('') }}
-                error={error}
-                onKeyDown={e => e.key === 'Enter' && goAddress()}
-              />
+              <div className="relative">
+                <Input
+                  label="Recipient Address"
+                  placeholder="Address or contact name"
+                  className="px-3"
+                  value={recipient}
+                  onChange={e => { setRecipient(e.target.value); setError(''); setShowSuggestions(true) }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  error={error}
+                  onKeyDown={e => e.key === 'Enter' && goAddress()}
+                />
+                {showSuggestions && recipient.length > 0 && (() => {
+                  const q = recipient.toLowerCase()
+                  const matches = contacts.filter(c =>
+                    c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q)
+                  ).slice(0, 5)
+                  if (!matches.length) return null
+                  return (
+                    <div className="absolute z-20 top-full left-0 right-0 mt-1 card-bg rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-lg">
+                      {matches.map(c => (
+                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setShowSuggestions(false) }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-left">
+                          <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-sm shrink-0">
+                            {c.emoji || c.name[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate">{c.name}</p>
+                            <p className="text-[10px] opacity-40 font-mono">{c.address.slice(0,6)}…{c.address.slice(-6)}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
               <div>
                 <p className="text-[10px] opacity-40 mb-2">Select token</p>
                 {ownedBalances.length > 0 ? (
@@ -202,6 +285,14 @@ export default function SendScreen() {
                   <p className="text-xs text-yellow-400">{anomalyWarning}</p>
                 </div>
               )}
+              {awaitingLedger && (
+                <div className="rounded-2xl bg-primary/10 border border-primary/20 px-3 py-2 flex items-center gap-2">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+                  </svg>
+                  <p className="text-xs text-primary">Confirm on your Ledger device…</p>
+                </div>
+              )}
               {error && <p className="text-xs text-red-400">{error}</p>}
               <Button fullWidth isLoading={isLoading} onClick={handleSend}>Send Now</Button>
             </motion.div>
@@ -222,6 +313,7 @@ export default function SendScreen() {
         </AnimatePresence>
       </div>
       <BottomNav />
+
     </div>
   )
 }

@@ -26,6 +26,15 @@ type LocalData = {
   approvedOrigins: { origin: string; connectedAt: string }[]
   stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
   agentWallets: AgentWallet[]
+  watchlist: string[]
+  inactivityGuard: {
+    enabled: boolean
+    recipientAddress: string
+    inactivityDays: number
+    lastActivityAt: number
+    lastWarnedAt?: number
+    pendingSweep?: boolean
+  }
 }
 
 type SyncData = {
@@ -33,6 +42,7 @@ type SyncData = {
   network: Network
   walletName: string
   customRpcUrl: string
+  notificationsEnabled: boolean
 }
 
 export async function getLocal<K extends keyof LocalData>(key: K): Promise<LocalData[K] | undefined> {
@@ -41,12 +51,8 @@ export async function getLocal<K extends keyof LocalData>(key: K): Promise<Local
   })
   if (raw === undefined || raw === null) return undefined
   if (typeof raw !== 'string') return raw as LocalData[K]
-  try {
-    const decrypted = await decryptFromStorage(raw)
-    return JSON.parse(decrypted) as LocalData[K]
-  } catch {
-    try { return JSON.parse(raw) as LocalData[K] } catch { return raw as LocalData[K] }
-  }
+  const decrypted = await decryptFromStorage(raw)
+  return JSON.parse(decrypted) as LocalData[K]
 }
 
 export async function setLocal<K extends keyof LocalData>(key: K, value: LocalData[K]): Promise<void> {

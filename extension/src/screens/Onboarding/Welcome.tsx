@@ -98,6 +98,16 @@ export default function Welcome() {
           <Button size="lg" variant="secondary" fullWidth onClick={() => navigate('/import')}>
             Import Existing Wallet
           </Button>
+          <button
+            onClick={() => navigate('/ledger-connect')}
+            className="w-full py-3 rounded-2xl border border-[var(--color-border)] text-sm font-semibold flex items-center justify-center gap-2 opacity-70 hover:opacity-100 hover:border-primary/40 transition-all"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+              <line x1="12" y1="18" x2="12.01" y2="18"/>
+            </svg>
+            Connect Ledger
+          </button>
         </div>
       </motion.div>
     </div>
