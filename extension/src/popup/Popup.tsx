@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import CommandPalette from '../components/ui/CommandPalette'
 import ChangelogModal from '../components/ui/ChangelogModal'
@@ -32,6 +32,15 @@ import SignApprovalScreen from '../screens/SignApproval'
 import AgentWalletsScreen from '../screens/AgentWallets'
 import BatchSendScreen from '../screens/BatchSend'
 import WatchlistScreen from '../screens/Watchlist'
+import { track, identifyWallet } from '../lib/analytics'
+
+function RouteTracker() {
+  const location = useLocation()
+  useEffect(() => {
+    track('page_view', { path: location.pathname })
+  }, [location.pathname])
+  return null
+}
 
 const _params = new URLSearchParams(window.location.search)
 const isDAppApproval = _params.get('page') === 'dapp-approval'
@@ -53,6 +62,10 @@ function AppRoutes() {
   useEffect(() => {
     init().then(() => setInitialized(true))
   }, [])
+
+  useEffect(() => {
+    if (account?.publicKey) identifyWallet(account.publicKey)
+  }, [account?.publicKey])
 
   useEffect(() => {
     if (!initialized) return
@@ -216,6 +229,7 @@ export default function Popup() {
     <ThemeProvider>
       <WalletProvider>
         <MemoryRouter>
+          <RouteTracker />
           <div className="w-[360px] h-[600px] overflow-hidden relative bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
             <ToastProvider>
               <AIProvider>

@@ -3,6 +3,7 @@ export interface Contact {
   name: string
   emoji?: string
   address: string
+  privacyAddress?: string
   note?: string
   createdAt: string
   lastInteractionAt?: string

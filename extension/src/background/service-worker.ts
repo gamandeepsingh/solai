@@ -153,10 +153,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const due: ScheduledJob[] = scheduledJobs.filter((j: ScheduledJob) => j.nextRun <= now)
     if (!due.length) return
 
-    const keypair = await getSessionKeypair()
+    const mainKeypair = await getSessionKeypair()
     const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
 
     for (const job of due) {
+      const keypair = job.agentId
+        ? (await getAgentKeypair(job.agentId)) ?? mainKeypair
+        : mainKeypair
       if (keypair) {
         try {
           let sig: string
@@ -167,7 +170,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
           } else {
             sig = await sendUsdc(keypair, job.action.recipient, job.action.amount, network)
           }
-          await logTx({ sig, type: 'send', timestamp: Date.now(), amount: job.action.amount, token: job.action.token, status: 'success' })
+          await logTx({ sig, type: 'send', timestamp: Date.now(), amount: job.action.amount, token: job.action.token, status: 'success', agentId: job.agentId })
           chrome.notifications.create(`scheduled-done-${job.id}-${now}`, {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icons/icon128.png'),
@@ -212,7 +215,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         USDT: data.tether?.usd ?? 1,
       }
 
-      const keypair = await getSessionKeypair()
+      const mainKeypair = await getSessionKeypair()
       const updatedOrders = [...conditionalOrders]
 
       for (const order of pending) {
@@ -226,6 +229,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         if (!triggered) continue
 
         const idx = updatedOrders.findIndex((o: ConditionalOrder) => o.id === order.id)
+        const keypair = order.agentId
+          ? (await getAgentKeypair(order.agentId)) ?? mainKeypair
+          : mainKeypair
 
         if (!keypair) {
           chrome.notifications.create(`order-locked-${order.id}`, {

@@ -9,6 +9,7 @@ import { useTransaction } from '../../hooks/useTransaction'
 import { useBalance } from '../../hooks/useBalance'
 import { validateRecipientAddress } from '../../lib/solana'
 import { logTx } from '../../lib/history'
+import { track } from '../../lib/analytics'
 import { useWallet } from '../../context/WalletContext'
 import { updateContactInteraction, getContacts } from '../../lib/contacts'
 import type { TokenBalance } from '../../types/tokens'
@@ -68,6 +69,8 @@ export default function SendScreen() {
   const [showDraftBanner, setShowDraftBanner] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [usePrivacyAddr, setUsePrivacyAddr] = useState(false)
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
 
   useEffect(() => { getContacts().then(setContacts) }, [])
 
@@ -152,7 +155,9 @@ export default function SendScreen() {
       chrome.storage.session.remove(DRAFT_KEY)
       logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: recipient, status: 'success' })
       updateContactInteraction(recipient).catch(() => {})
+      track('transaction_sent', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
     } catch (e: any) {
+      track('transaction_failed', { type: 'send', error: e.message })
       setError(e.message)
     }
   }
@@ -206,7 +211,7 @@ export default function SendScreen() {
                   return (
                     <div className="absolute z-20 top-full left-0 right-0 mt-1 card-bg rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-lg">
                       {matches.map(c => (
-                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setShowSuggestions(false) }}
+                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setSelectedContact(c); setUsePrivacyAddr(false); setShowSuggestions(false) }}
                           className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-left">
                           <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-sm shrink-0">
                             {c.emoji || c.name[0].toUpperCase()}
@@ -221,6 +226,24 @@ export default function SendScreen() {
                   )
                 })()}
               </div>
+              {selectedContact?.privacyAddress && (
+                <button
+                  onClick={() => {
+                    setUsePrivacyAddr(v => !v)
+                    setRecipient(usePrivacyAddr ? selectedContact.address : selectedContact.privacyAddress!)
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs transition-colors ${
+                    usePrivacyAddr
+                      ? 'border-primary bg-primary/10 text-primary font-medium'
+                      : 'border-[var(--color-border)] opacity-60'
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  {usePrivacyAddr ? 'Sending to privacy address' : 'Send to privacy address'}
+                </button>
+              )}
               <div>
                 <p className="text-[10px] opacity-40 mb-2">Select token</p>
                 {ownedBalances.length > 0 ? (
@@ -279,6 +302,14 @@ export default function SendScreen() {
                 <Row label="Token" value={activeToken.meta.symbol} />
                 <Row label="Amount" value={`${amount} ${activeToken.meta.symbol}`} />
                 <Row label="To" value={`${recipient.slice(0, 8)}...${recipient.slice(-8)}`} />
+                {usePrivacyAddr && (
+                  <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--color-border)]">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <p className="text-[10px] text-primary font-medium">Sending to privacy address</p>
+                  </div>
+                )}
               </div>
               {anomalyWarning && (
                 <div className="rounded-2xl bg-yellow-500/10 border border-yellow-500/30 px-3 py-2">

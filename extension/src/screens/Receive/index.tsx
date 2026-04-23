@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
+import { useLocation } from 'react-router-dom'
 import Header from '../../components/layout/Header'
 import BottomNav from '../../components/layout/BottomNav'
 import CopyButton from '../../components/ui/CopyButton'
@@ -51,8 +52,10 @@ export default function ReceiveScreen() {
   const { account, activeId, network, stealthAddresses, generateStealthAddress, collectFromStealth, deleteStealthAddress } = useWallet()
   const { theme } = useTheme()
   const { toast } = useToast()
+  const location = useLocation()
   const address = account?.publicKey ?? ''
-  const [tab, setTab] = useState<'main' | 'stealth'>('main')
+  const initialTab = (location.state as any)?.tab === 'privacy' ? 'stealth' : 'main'
+  const [tab, setTab] = useState<'main' | 'stealth'>(initialTab)
   const [isClaiming, setIsClaiming] = useState(false)
   const [faucetCooldownHrs, setFaucetCooldownHrs] = useState(0)
 
@@ -171,7 +174,7 @@ export default function ReceiveScreen() {
     if (!deleteTarget) return
     await deleteStealthAddress(deleteTarget.publicKey)
     setDeleteTarget(null)
-    toast('Stealth address removed', 'success')
+    toast('Privacy address removed', 'success')
   }
 
   function openCollect(pubkey: string) {
@@ -203,7 +206,7 @@ export default function ReceiveScreen() {
             onClick={() => setTab('main')}
             className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-colors ${tab === 'main' ? 'bg-primary text-black' : 'opacity-40'}`}
           >
-            Main
+            Address
           </button>
           <button
             onClick={() => setTab('stealth')}
@@ -212,7 +215,7 @@ export default function ReceiveScreen() {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Stealth
+            Privacy
           </button>
         </div>
       </div>
@@ -256,8 +259,8 @@ export default function ReceiveScreen() {
         ) : (
           <div className="flex flex-col gap-3 px-4 py-4">
             <div>
-              <h2 className="text-base font-bold mb-0.5">Stealth Addresses</h2>
-              <p className="text-xs opacity-40">HD-derived addresses unlinkable to your main wallet on-chain.</p>
+              <h2 className="text-base font-bold mb-0.5">Privacy Addresses</h2>
+              <p className="text-xs opacity-40">Unique addresses unlinkable to your main wallet. Share a different one with each contact.</p>
             </div>
 
             {myStealthAddresses.length === 0 ? (
@@ -265,8 +268,8 @@ export default function ReceiveScreen() {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-30">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <p className="text-sm opacity-40">No stealth addresses yet</p>
-                <p className="text-xs opacity-30">Generate one below to receive privately</p>
+                <p className="text-sm opacity-40">No privacy addresses yet</p>
+                <p className="text-xs opacity-30">Generate one below to receive without revealing your main wallet</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -282,6 +285,22 @@ export default function ReceiveScreen() {
                           <p className="text-[10px] font-mono opacity-40">{truncate(s.publicKey)}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <motion.button
+                            whileTap={{ scale: 0.93 }}
+                            onClick={() => {
+                              const shareText = `My privacy address: ${s.publicKey}\n\nSend here to keep my main wallet address private.`
+                              navigator.clipboard.writeText(shareText)
+                              toast('Share message copied!', 'success')
+                            }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-primary/10 opacity-30 hover:opacity-80 hover:text-primary transition-all"
+                            title="Share privacy address"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                          </motion.button>
                           <CopyButton text={s.publicKey} />
                           <motion.button
                             whileTap={{ scale: 0.93 }}
@@ -345,7 +364,7 @@ export default function ReceiveScreen() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              Generate New Stealth Address
+              Generate New Privacy Address
             </motion.button>
           </div>
         )}
@@ -366,7 +385,7 @@ export default function ReceiveScreen() {
             >
               {newStealthKey ? (
                 <>
-                  <p className="text-sm font-semibold text-center">Stealth Address Generated</p>
+                  <p className="text-sm font-semibold text-center">Privacy Address Generated</p>
                   <div className="flex justify-center">
                     <div className="p-3 rounded-2xl card-bg">
                       <QRCodeSVG value={newStealthKey} size={140} bgColor="transparent"
@@ -385,7 +404,7 @@ export default function ReceiveScreen() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold text-center">Generate Stealth Address</p>
+                  <p className="text-sm font-semibold text-center">Generate Privacy Address</p>
                   <div className="flex flex-col gap-2">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs opacity-50">Label (optional)</span>

@@ -10,6 +10,7 @@ import { useBalance } from '../../hooks/useBalance'
 import { useToast } from '../../components/ui/Toast'
 import { getSwapQuote, executeSwap, parseQuoteForDisplay } from '../../lib/jupiter'
 import { logTx } from '../../lib/history'
+import { track } from '../../lib/analytics'
 import { CURATED_TOKENS } from '../../lib/tokens'
 import type { JupiterQuote } from '../../lib/jupiter'
 import type { AgentToken } from '../../types/agent'
@@ -164,7 +165,9 @@ export default function SwapScreen() {
       setStep('done')
       toast('Swap successful!', 'success')
       logTx({ sig, type: 'swap', timestamp: Date.now(), amount: parseFloat(amount), token: `${inputToken}→${outputToken}`, status: 'success' })
+      track('swap_completed', { from: inputToken, to: outputToken, amount: parseFloat(amount) })
     } catch (e: any) {
+      track('transaction_failed', { type: 'swap', error: e.message })
       const raw = e.message ?? 'Swap failed'
       const msg = raw.toLowerCase().includes('slippage') || raw.toLowerCase().includes('simulation')
         ? 'Quote expired — tap Swap to retry'

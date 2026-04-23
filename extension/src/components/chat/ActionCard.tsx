@@ -27,10 +27,11 @@ interface ActionCardProps {
   message: ChatMessage
   onConfirm: () => void
   onCancel: () => void
+  onSelectAgent?: (agentId: string | null) => void
 }
 
-export default function ActionCard({ message, onConfirm, onCancel }: ActionCardProps) {
-  const { action, actionState, txSignature, errorMessage } = message
+export default function ActionCard({ message, onConfirm, onCancel, onSelectAgent }: ActionCardProps) {
+  const { action, actionState, txSignature, errorMessage, agentWallets, selectedAgentId } = message
   if (!action) return null
 
   const { kind, params } = action as any
@@ -136,22 +137,54 @@ export default function ActionCard({ message, onConfirm, onCancel }: ActionCardP
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="px-4 pb-4 flex gap-2"
+            className="flex flex-col gap-2 px-4 pb-4"
           >
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={onConfirm}
-              className="flex-1 py-2 rounded-2xl text-xs font-semibold bg-primary text-black"
-            >
-              Confirm
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={onCancel}
-              className="flex-1 py-2 rounded-2xl text-xs font-medium border border-[var(--color-border)] opacity-60"
-            >
-              Cancel
-            </motion.button>
+            {(kind === 'schedule' || kind === 'conditional_order') && agentWallets && agentWallets.length > 0 && (
+              <div>
+                <p className="text-[9px] opacity-40 mb-1.5">Execute from</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => onSelectAgent?.(null)}
+                    className={`text-[10px] px-2.5 py-1 rounded-xl border transition-colors ${
+                      selectedAgentId === null || selectedAgentId === undefined
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-[var(--color-border)] opacity-50'
+                    }`}
+                  >
+                    Main Wallet
+                  </button>
+                  {agentWallets.map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => onSelectAgent?.(a.id)}
+                      className={`text-[10px] px-2.5 py-1 rounded-xl border transition-colors ${
+                        selectedAgentId === a.id
+                          ? 'border-primary bg-primary/10 text-primary font-medium'
+                          : 'border-[var(--color-border)] opacity-50'
+                      }`}
+                    >
+                      {a.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={onConfirm}
+                className="flex-1 py-2 rounded-2xl text-xs font-semibold bg-primary text-black"
+              >
+                Confirm
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={onCancel}
+                className="flex-1 py-2 rounded-2xl text-xs font-medium border border-[var(--color-border)] opacity-60"
+              >
+                Cancel
+              </motion.button>
+            </div>
           </motion.div>
         )}
 

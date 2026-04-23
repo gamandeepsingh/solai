@@ -58,6 +58,7 @@ export interface ScheduledJob {
   intervalLabel: string
   nextRun: number
   createdAt: number
+  agentId?: string
 }
 
 export interface AgentGuardrails {

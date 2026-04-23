@@ -28,6 +28,8 @@ export default function ContactsScreen() {
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('')
   const [address, setAddress] = useState('')
+  const [privacyAddress, setPrivacyAddress] = useState('')
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -58,13 +60,14 @@ export default function ContactsScreen() {
   async function handleAdd() {
     if (!name.trim()) return setError('Name is required')
     if (!isValidSolanaAddress(address)) return setError('Invalid Solana address')
+    if (privacyAddress && !isValidSolanaAddress(privacyAddress)) return setError('Invalid privacy address')
     const dup = contacts.find(c => c.address === address)
     if (dup) return setError(`Address already saved as "${dup.name}"`)
     setIsSaving(true)
     try {
-      await add({ name: name.trim(), emoji: emoji.trim() || undefined, address, note: note.trim() || undefined })
+      await add({ name: name.trim(), emoji: emoji.trim() || undefined, address, privacyAddress: privacyAddress.trim() || undefined, note: note.trim() || undefined })
       setShowAdd(false)
-      setName(''); setEmoji(''); setAddress(''); setNote(''); setError('')
+      setName(''); setEmoji(''); setAddress(''); setPrivacyAddress(''); setShowPrivacy(false); setNote(''); setError('')
     } catch {
       setError('Failed to save contact')
     } finally {
@@ -128,7 +131,15 @@ export default function ContactsScreen() {
                       {c.emoji || c.name[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">{c.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold">{c.name}</p>
+                        {c.privacyAddress && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-medium flex items-center gap-0.5">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            Private
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] opacity-40 font-mono">{c.address.slice(0, 8)}...{c.address.slice(-8)}</p>
                       {c.lastInteractionAt && (
                         <p className="text-[10px] opacity-40">
@@ -204,6 +215,14 @@ export default function ContactsScreen() {
             </div>
           </div>
           <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
+          {!showPrivacy ? (
+            <button onClick={() => setShowPrivacy(true)} className="flex items-center gap-1.5 text-[11px] text-primary opacity-70 hover:opacity-100 transition-opacity self-start">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Add privacy address
+            </button>
+          ) : (
+            <Input label="Privacy Address (optional)" placeholder="Their private receive address" value={privacyAddress} onChange={e => { setPrivacyAddress(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
+          )}
           <Input label="Note (optional)" placeholder="e.g. Work wallet" value={note} onChange={e => setNote(e.target.value)} error={error} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
           <Button fullWidth isLoading={isSaving} onClick={handleAdd}>Save Contact</Button>
         </div>

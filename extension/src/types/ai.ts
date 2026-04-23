@@ -1,4 +1,4 @@
-import type { ActionParams, ActionState } from './agent'
+import type { ActionParams, ActionState, AgentWallet } from './agent'
 
 export interface ChatMessage {
   id: string
@@ -9,6 +9,8 @@ export interface ChatMessage {
   actionState?: ActionState
   txSignature?: string
   errorMessage?: string
+  agentWallets?: AgentWallet[]
+  selectedAgentId?: string | null
 }
 
 export interface AISettings {

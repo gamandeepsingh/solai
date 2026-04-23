@@ -88,7 +88,24 @@ export default function Welcome() {
         <div className="flex flex-col items-center gap-3">
           <CuteCreature />
           <h1 className="text-3xl font-bold tracking-tight">SOLAI</h1>
-          <p className="text-sm opacity-50 max-w-[200px]">Your friendly Solana wallet, powered by AI</p>
+          <p className="text-sm opacity-50 max-w-[200px]">Your autonomous, privacy-first Solana wallet</p>
+        </div>
+
+        <div className="flex gap-3 w-full max-w-[280px]">
+          <div className="flex-1 flex flex-col items-center gap-1.5 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl px-3 py-2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/>
+            </svg>
+            <p className="text-[10px] font-semibold text-center leading-tight">Agent Wallets</p>
+            <p className="text-[9px] opacity-40 text-center leading-tight">Automate payments with guardrails</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center gap-1.5 bg-[var(--color-card)] border border-[var(--color-border)] rounded-2xl px-3 py-2.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <p className="text-[10px] font-semibold text-center leading-tight">Privacy Addresses</p>
+            <p className="text-[9px] opacity-40 text-center leading-tight">Receive without revealing your wallet</p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 w-full max-w-[280px]">
