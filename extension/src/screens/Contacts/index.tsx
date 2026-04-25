@@ -211,7 +211,7 @@ export default function ContactsScreen() {
               <Input label="Name" placeholder="Friend's name" value={name} onChange={e => { setName(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />
             </div>
             <div style={{ width: 72 }}>
-              <Input label="Emoji" placeholder="👤" value={emoji} onChange={e => setEmoji(e.target.value)} />
+              <Input label="Emoji" placeholder=":)" value={emoji} onChange={e => setEmoji(e.target.value)} />
             </div>
           </div>
           <Input label="Solana Address" placeholder="Wallet address" value={address} onChange={e => { setAddress(e.target.value); setError('') }} onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAdd()} />

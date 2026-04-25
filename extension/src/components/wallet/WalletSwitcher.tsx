@@ -167,7 +167,9 @@ export default function WalletSwitcher({ onClose }: Props) {
                         onKeyDown={e => { if (e.key === 'Enter') handleRename(wallet.id); if (e.key === 'Escape') setEditingId(null) }}
                       />
                       <button onClick={() => handleRename(wallet.id)} className="text-[10px] text-primary font-semibold px-2 py-1 rounded-lg bg-primary/10">Save</button>
-                      <button onClick={() => setEditingId(null)} className="text-[10px] opacity-40 px-1">✕</button>
+                      <button onClick={() => setEditingId(null)} className="opacity-40 hover:opacity-70 px-1">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
                     </div>
                   ) : (
                     <button className="w-full flex items-center gap-3 px-3 py-3 text-left" onClick={() => handleSwitch(wallet)}>

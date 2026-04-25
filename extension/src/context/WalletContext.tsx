@@ -53,6 +53,7 @@ interface WalletContextValue {
   agentWallets: AgentWallet[]
   createAgentWallet: (password: string, name: string, guardrails: AgentGuardrails) => Promise<AgentWallet>
   updateAgentGuardrails: (agentId: string, guardrails: AgentGuardrails) => Promise<void>
+  saveAgentWallet: (agent: AgentWallet) => Promise<void>
   toggleAgent: (agentId: string, enabled: boolean) => Promise<void>
   deleteAgentWallet: (agentId: string) => Promise<void>
   fundAgent: (agentId: string, amountSol: number) => Promise<string>
@@ -412,7 +413,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       name,
       enabled: true,
       guardrails,
-      stats: { totalSpentSol: 0, dailySpentSol: 0, dailyResetAt: 0, lastPaymentAt: 0, txCount: 0 },
+      stats: { totalSpentSol: 0, dailySpentSol: 0, dailyResetAt: 0, lastPaymentAt: 0, txCount: 0, tokenSpend: {} },
     }
     const updated = [...allAgents, newAgent]
     await setLocal('agentWallets', updated)
@@ -433,6 +434,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const updateAgentGuardrails = useCallback(async (agentId: string, guardrails: AgentGuardrails): Promise<void> => {
     const allAgents = await getLocal('agentWallets') ?? []
     const updated = allAgents.map(a => a.id === agentId ? { ...a, guardrails } : a)
+    await setLocal('agentWallets', updated)
+    setAgentWallets(updated)
+  }, [])
+
+  const saveAgentWallet = useCallback(async (agent: AgentWallet): Promise<void> => {
+    const allAgents = await getLocal('agentWallets') ?? []
+    const updated = allAgents.map(a => a.id === agent.id ? agent : a)
     await setLocal('agentWallets', updated)
     setAgentWallets(updated)
   }, [])
@@ -534,7 +542,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       unlock, lock, changePassword, changePasswordFromMnemonic, setNetwork, init,
       generateStealthAddress, collectFromStealth, deleteStealthAddress,
       agentWallets,
-      createAgentWallet, updateAgentGuardrails, toggleAgent, deleteAgentWallet,
+      createAgentWallet, updateAgentGuardrails, saveAgentWallet, toggleAgent, deleteAgentWallet,
       fundAgent, collectFromAgent,
       isLedgerWallet, addLedgerWallet,
     }}>

@@ -32,6 +32,7 @@ import SignApprovalScreen from '../screens/SignApproval'
 import AgentWalletsScreen from '../screens/AgentWallets'
 import BatchSendScreen from '../screens/BatchSend'
 import WatchlistScreen from '../screens/Watchlist'
+import AllowanceApprovalScreen from '../screens/AllowanceApproval'
 import { track, identifyWallet } from '../lib/analytics'
 
 function RouteTracker() {
@@ -45,7 +46,9 @@ function RouteTracker() {
 const _params = new URLSearchParams(window.location.search)
 const isDAppApproval = _params.get('page') === 'dapp-approval'
 const isSignApproval = _params.get('page') === 'sign-approval'
+const isAllowanceRequest = _params.get('page') === 'allowance-request'
 const signApprovalRequestId = _params.get('requestId') ?? ''
+const allowanceRequestId = _params.get('requestId') ?? ''
 
 function AppRoutes() {
   const { init, isLoading, isLocked, account, lock } = useWallet()
@@ -170,6 +173,14 @@ function AppRoutes() {
   // Connect approval popup opened by service worker
   if (isDAppApproval) {
     return <DAppApprovalScreen />
+  }
+
+  if (isAllowanceRequest) {
+    return (
+      <div className="w-[360px] h-[600px] overflow-hidden relative bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
+        <AllowanceApprovalScreen requestId={allowanceRequestId} />
+      </div>
+    )
   }
 
   return (

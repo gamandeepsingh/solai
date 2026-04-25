@@ -8,17 +8,22 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0a;
-      --card: #111111;
-      --border: #222222;
+      --bg: #0b0f0c;
+      --card: #141a16;
+      --card2: #1a2220;
+      --border: rgba(255,255,255,0.07);
       --text: #e8e8e8;
-      --muted: #555555;
+      --muted: #556655;
       --primary: #ABFF7A;
-      --primary-dim: rgba(171, 255, 122, 0.12);
-      --red: #ff5555;
-      --red-dim: rgba(255, 85, 85, 0.12);
+      --primary-dim: rgba(171, 255, 122, 0.10);
+      --red: #ff6060;
+      --red-dim: rgba(255, 96, 96, 0.10);
       --green: #55ff88;
-      --green-dim: rgba(85, 255, 136, 0.10);
+      --green-dim: rgba(85, 255, 136, 0.08);
+      --blue: #60b0ff;
+      --blue-dim: rgba(96, 176, 255, 0.08);
+      --yellow: #ffc850;
+      --yellow-dim: rgba(255, 200, 80, 0.08);
     }
 
     body {
@@ -29,413 +34,735 @@
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding: 40px 16px;
+      padding: 40px 16px 80px;
     }
 
-    .container {
-      width: 100%;
-      max-width: 480px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+    .container { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px; }
 
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
-    }
-
+    /* Header */
+    .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
     .logo-icon {
-      width: 36px;
-      height: 36px;
+      width: 38px; height: 38px;
       background: var(--primary-dim);
-      border: 1px solid rgba(171,255,122,0.25);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      border: 1px solid rgba(171,255,122,0.2);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
     }
-
     h1 { font-size: 20px; font-weight: 700; }
-    .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .subtitle { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
+    /* Status pill */
     .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 500;
-      border: 1px solid transparent;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 500; border: 1px solid transparent;
     }
-    .status-pill.ok { background: var(--green-dim); color: var(--green); border-color: rgba(85,255,136,0.2); }
-    .status-pill.err { background: var(--red-dim); color: var(--red); border-color: rgba(255,85,85,0.2); }
-    .status-pill.wait { background: rgba(255,200,80,0.1); color: #ffc850; border-color: rgba(255,200,80,0.2); }
-
-    .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: currentColor;
-      animation: pulse 2s infinite;
-    }
+    .status-pill.ok  { background: var(--green-dim);  color: var(--green);   border-color: rgba(85,255,136,0.18); }
+    .status-pill.err { background: var(--red-dim);    color: var(--red);     border-color: rgba(255,96,96,0.18); }
+    .status-pill.wait{ background: var(--yellow-dim); color: var(--yellow);  border-color: rgba(255,200,80,0.18); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
     .status-pill.err .dot, .status-pill.wait .dot { animation: none; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
+    /* Cards */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: 20px;
       padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+      display: flex; flex-direction: column; gap: 14px;
     }
+    .card-header { display: flex; align-items: center; gap: 10px; }
+    .card-icon {
+      width: 32px; height: 32px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--primary-dim); color: var(--primary);
+      flex-shrink: 0;
+    }
+    .card-icon.blue   { background: var(--blue-dim);   color: var(--blue); }
+    .card-icon.yellow { background: var(--yellow-dim); color: var(--yellow); }
+    .card-icon.green  { background: var(--green-dim);  color: var(--green); }
+    .card-title  { font-size: 13px; font-weight: 700; }
+    .card-method { font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; color: var(--primary); opacity: .7; margin-top: 1px; }
+    .card-method.blue   { color: var(--blue); }
+    .card-method.yellow { color: var(--yellow); }
+    .card-method.green  { color: var(--green); }
 
-    .card-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
+    /* Form fields */
+    label { display: flex; flex-direction: column; gap: 5px; }
+    .lbl { font-size: 11px; color: var(--muted); font-weight: 500; }
 
-    label {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
+    input, select {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px;
+      color: var(--text); font-size: 13px; font-family: inherit;
+      outline: none; transition: border-color .15s; width: 100%;
     }
-
-    .label-text {
-      font-size: 11px;
-      color: var(--muted);
-      font-weight: 500;
-    }
-
-    input {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      color: var(--text);
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s;
-      width: 100%;
-    }
-    input:focus { border-color: rgba(171,255,122,0.4); }
+    input:focus, select:focus { border-color: rgba(171,255,122,.35); }
     input::placeholder { color: var(--muted); }
-    input[type=number] { font-family: 'SF Mono', 'Fira Code', monospace; }
+    select option { background: #111; }
 
     .row { display: flex; gap: 10px; }
     .row label { flex: 1; }
 
-    button {
-      font-family: inherit;
-      cursor: pointer;
-      border: none;
-      outline: none;
+    /* Buttons */
+    button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+    .btn {
+      border-radius: 12px; padding: 12px;
+      font-size: 13px; font-weight: 700; width: 100%;
+      transition: opacity .15s, transform .1s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
     }
-
-    .btn-primary {
-      background: var(--primary);
-      color: #0a0a0a;
-      border-radius: 12px;
-      padding: 12px;
-      font-size: 14px;
-      font-weight: 700;
-      width: 100%;
-      transition: opacity 0.15s, transform 0.1s;
-    }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-primary:active { transform: scale(0.98); }
-    .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-
+    .btn:hover { opacity: .88; }
+    .btn:active { transform: scale(.98); }
+    .btn:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+    .btn-green  { background: var(--primary); color: #0b0f0c; }
+    .btn-blue   { background: var(--blue);    color: #0b0f0c; }
+    .btn-yellow { background: var(--yellow);  color: #0b0f0c; }
+    .btn-ghost  { background: rgba(255,255,255,.04); color: var(--muted); border: 1px solid var(--border); }
     .btn-copy {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: 8px;
-      padding: 4px 8px;
-      font-size: 11px;
-      transition: border-color 0.15s, color 0.15s;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 8px; padding: 3px 8px;
+      font-size: 11px; transition: border-color .15s, color .15s; white-space: nowrap;
     }
     .btn-copy:hover { border-color: var(--primary); color: var(--primary); }
 
+    /* Results */
     .result {
-      border-radius: 12px;
-      padding: 14px;
-      font-size: 12px;
-      line-height: 1.6;
-      word-break: break-all;
+      border-radius: 12px; padding: 14px;
+      font-size: 12px; line-height: 1.7; word-break: break-all;
       display: none;
     }
-    .result.success {
-      background: var(--green-dim);
-      border: 1px solid rgba(85,255,136,0.2);
-      color: var(--green);
-      display: block;
-    }
-    .result.error {
-      background: var(--red-dim);
-      border: 1px solid rgba(255,85,85,0.2);
-      color: var(--red);
-      display: block;
-    }
-
-    .sig-link {
-      color: var(--primary);
-      text-decoration: none;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 11px;
-    }
+    .result.success { background: var(--green-dim); border: 1px solid rgba(85,255,136,.18); color: var(--green); display: block; }
+    .result.error   { background: var(--red-dim);   border: 1px solid rgba(255,96,96,.18);  color: var(--red);   display: block; }
+    .result-label { font-weight: 700; margin-bottom: 4px; }
+    .result-mono { font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; color: inherit; }
+    .sig-link { color: var(--primary); text-decoration: none; font-size: 11px; }
     .sig-link:hover { text-decoration: underline; }
 
+    /* Activity log */
+    .log { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+    .log-entry {
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px;
+      font-size: 11px; line-height: 1.6;
+    }
+    .log-entry.ok  { border-left: 2px solid var(--green); }
+    .log-entry.err { border-left: 2px solid var(--red); }
+    .log-time { color: var(--muted); font-size: 10px; float: right; }
+    .log-method { font-family: monospace; color: var(--primary); font-weight: 600; }
+    .log-body { color: var(--muted); margin-top: 2px; word-break: break-all; }
+
+    /* How to */
+    .steps { display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--muted); }
+    .steps li { display: flex; gap: 10px; list-style: none; align-items: flex-start; }
+    .step-num {
+      width: 20px; height: 20px; background: var(--primary-dim); color: var(--primary);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    }
+
+    /* Info rows */
     .info-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px;
     }
     .info-row:last-child { border-bottom: none; padding-bottom: 0; }
     .info-label { color: var(--muted); }
-    .info-value { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text); display: flex; align-items: center; gap: 6px; }
+    .info-value { font-family: monospace; display: flex; align-items: center; gap: 6px; }
 
+    /* Spinner */
     .spinner {
-      display: inline-block;
       width: 14px; height: 14px;
-      border: 2px solid rgba(10,10,10,0.3);
-      border-top-color: #0a0a0a;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle;
-      margin-right: 6px;
+      border: 2px solid rgba(11,15,12,0.3); border-top-color: #0b0f0c;
+      border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .steps {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .steps li { display: flex; gap: 8px; list-style: none; }
-    .step-num {
-      width: 18px; height: 18px;
-      background: var(--primary-dim);
-      color: var(--primary);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700;
-      flex-shrink: 0; margin-top: 1px;
-    }
+    .divider { height: 1px; background: var(--border); }
+    footer { text-align: center; font-size: 11px; color: var(--muted); padding-top: 8px; }
 
-    .divider { height: 1px; background: var(--border); margin: 4px 0; }
-
-    footer { text-align: center; font-size: 11px; color: var(--muted); padding-top: 4px; }
+    code { font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; color: var(--primary); }
+    .code-block {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; font-family: monospace; font-size: 11px;
+      color: #b0c8b0; line-height: 1.8; white-space: pre-wrap; overflow-x: auto;
+    }
+    .log-empty { text-align: center; color: var(--muted); font-size: 12px; padding: 20px 0; }
   </style>
 </head>
 <body>
-  <div class="container">
+<div class="container">
 
-    <!-- Header -->
-    <div>
-      <div class="logo">
-        <div class="logo-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ABFF7A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="8" width="18" height="13" rx="2"/>
-            <path d="M8 8V6a4 4 0 0 1 8 0v2"/>
-            <circle cx="9" cy="14" r="1" fill="#ABFF7A"/>
-            <circle cx="15" cy="14" r="1" fill="#ABFF7A"/>
-            <path d="M9.5 18c.8.5 1.5.8 2.5.8s1.7-.3 2.5-.8"/>
-          </svg>
-        </div>
-        <div>
-          <h1>Agent Wallet Tester</h1>
-          <div class="subtitle">SOLAI · dApp simulation</div>
-        </div>
+  <!-- Header -->
+  <div>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ABFF7A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          <circle cx="12" cy="16" r="1" fill="#ABFF7A"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Agent Wallet Tester</h1>
+        <div class="subtitle">SOLAI · Full API test suite</div>
       </div>
     </div>
-
-    <!-- Extension status -->
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <span class="status-pill wait" id="ext-status">
-        <span class="dot"></span>
-        <span>Checking extension…</span>
-      </span>
-      <button class="btn-copy" onclick="location.reload()">Refresh</button>
-    </div>
-
-    <!-- How to use -->
-    <div class="card">
-      <div class="card-title">How to use</div>
-      <ul class="steps">
-        <li><span class="step-num">1</span><span>Install the SOLAI extension and unlock your wallet</span></li>
-        <li><span class="step-num">2</span><span>In the extension, go to <strong style="color:var(--text)">Settings → Agent Wallets</strong> and create an agent</span></li>
-        <li><span class="step-num">3</span><span>Fund the agent with SOL from the extension</span></li>
-        <li><span class="step-num">4</span><span>Copy the Agent ID and paste it below, then trigger a payment</span></li>
-      </ul>
-    </div>
-
-    <!-- Agent info display -->
-    <div class="card" id="agent-info-card" style="display:none;">
-      <div class="card-title">Extension Detected</div>
-      <div id="agent-info-rows"></div>
-    </div>
-
-    <!-- Payment form -->
-    <div class="card">
-      <div class="card-title">Trigger Payment</div>
-
-      <label>
-        <span class="label-text">Agent ID</span>
-        <input id="agent-id" type="text" placeholder="Paste agent ID from SOLAI extension" />
-      </label>
-
-      <label>
-        <span class="label-text">Recipient Address</span>
-        <input id="recipient" type="text" placeholder="Solana wallet address (base58)" />
-      </label>
-
-      <div class="row">
-        <label>
-          <span class="label-text">Amount (SOL)</span>
-          <input id="amount" type="number" step="0.0001" min="0.0001" placeholder="0.001" value="0.001" />
-        </label>
-        <label>
-          <span class="label-text">Memo (optional)</span>
-          <input id="memo" type="text" placeholder="Test payment" value="Test payment" />
-        </label>
-      </div>
-
-      <button class="btn-primary" id="pay-btn" onclick="triggerPay()">
-        Send via Agent Wallet
-      </button>
-
-      <div class="result" id="result"></div>
-    </div>
-
-    <!-- Raw API section -->
-    <div class="card">
-      <div class="card-title">Raw API</div>
-      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
-        The SOLAI extension injects <code style="color:var(--primary); font-size:11px;">window.solaiAgent</code> into every page.<br/>
-        Call it from the browser console:
-      </div>
-      <div style="background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px; font-family:'SF Mono','Fira Code',monospace; font-size:11px; color:#ccc; line-height:1.8; white-space:pre-wrap;">window.solaiAgent.pay({
-  agentId: "your-agent-id",
-  recipient: "sol-address",
-  amountSol: 0.001,
-  memo: "optional"
-}).then(r => console.log(r.signature))</div>
-    </div>
-
-    <footer>SOLAI Agent Wallet · Local test page · Not deployed</footer>
   </div>
 
-  <script>
-    const statusEl = document.getElementById('ext-status')
-    const agentCard = document.getElementById('agent-info-card')
-    const agentRows = document.getElementById('agent-info-rows')
+  <!-- Extension status -->
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <span class="status-pill wait" id="ext-status">
+      <span class="dot"></span>
+      <span>Checking extension…</span>
+    </span>
+    <button class="btn-copy" onclick="location.reload()">Refresh</button>
+  </div>
 
-    function setStatus(type, text) {
-      statusEl.className = 'status-pill ' + type
-      statusEl.innerHTML = `<span class="dot"></span><span>${text}</span>`
+  <!-- Extension info -->
+  <div class="card" id="agent-info-card" style="display:none;">
+    <div class="card-title" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;">Extension Info</div>
+    <div id="agent-info-rows"></div>
+  </div>
+
+  <!-- How to use -->
+  <div class="card">
+    <div class="card-title" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;">How to use</div>
+    <ul class="steps">
+      <li><span class="step-num">1</span><span>Install SOLAI extension, unlock your wallet</span></li>
+      <li><span class="step-num">2</span><span>Go to <strong style="color:var(--text)">Agents</strong> tab → create an agent, set guardrails, fund it with SOL or USDC/USDT</span></li>
+      <li><span class="step-num">3</span><span>Copy the Agent ID from the card and paste it in the forms below</span></li>
+      <li><span class="step-num">4</span><span>Run any test — results appear inline and in the Activity Log</span></li>
+    </ul>
+  </div>
+
+  <!-- Shared agent ID -->
+  <div class="card">
+    <div class="card-title" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;">Agent ID (shared across all tests)</div>
+    <label>
+      <span class="lbl">Agent ID</span>
+      <input id="shared-agent-id" type="text" placeholder="Paste your agent UUID from the extension" />
+    </label>
+  </div>
+
+  <!-- ── TEST 1: pay() ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">SOL Payment</div>
+        <div class="card-method">window.solaiAgent.pay()</div>
+      </div>
+    </div>
+
+    <label>
+      <span class="lbl">Recipient Address</span>
+      <input id="pay-recipient" type="text" placeholder="Solana wallet address (base58)" />
+    </label>
+    <div class="row">
+      <label>
+        <span class="lbl">Amount (SOL)</span>
+        <input id="pay-amount" type="number" step="0.0001" min="0.0001" placeholder="0.001" value="0.001" />
+      </label>
+      <label>
+        <span class="lbl">Memo (optional)</span>
+        <input id="pay-memo" type="text" placeholder="Test payment" value="Test payment" />
+      </label>
+    </div>
+    <button class="btn btn-green" id="pay-btn" onclick="runPay()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+      Send SOL
+    </button>
+    <div class="result" id="pay-result"></div>
+  </div>
+
+  <!-- ── TEST 2: payToken() ─────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon blue">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">SPL Token Payment</div>
+        <div class="card-method blue">window.solaiAgent.payToken()</div>
+      </div>
+    </div>
+
+    <label>
+      <span class="lbl">Recipient Address</span>
+      <input id="tok-recipient" type="text" placeholder="Solana wallet address (base58)" />
+    </label>
+    <div class="row">
+      <label>
+        <span class="lbl">Token</span>
+        <select id="tok-token">
+          <option value="USDC">USDC</option>
+          <option value="USDT">USDT</option>
+          <option value="JUP">JUP</option>
+          <option value="BONK">BONK</option>
+          <option value="RAY">RAY</option>
+        </select>
+      </label>
+      <label>
+        <span class="lbl">Amount</span>
+        <input id="tok-amount" type="number" step="0.01" min="0.01" placeholder="1.00" value="1.00" />
+      </label>
+    </div>
+    <button class="btn btn-blue" id="tok-btn" onclick="runPayToken()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      Send Token
+    </button>
+    <div class="result" id="tok-result"></div>
+  </div>
+
+  <!-- ── TEST 3: swapAndPay() ──────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon yellow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Swap then Pay</div>
+        <div class="card-method yellow">window.solaiAgent.swapAndPay()</div>
+      </div>
+    </div>
+
+    <p style="font-size:12px; color:var(--muted); line-height:1.6;">
+      Agent swaps <code>fromToken</code> → <code>toToken</code> via Jupiter, then sends <code>toToken</code> to the recipient — all in one call. Requires mainnet.
+    </p>
+
+    <label>
+      <span class="lbl">Recipient Address</span>
+      <input id="swap-recipient" type="text" placeholder="Solana wallet address (base58)" />
+    </label>
+    <div class="row">
+      <label>
+        <span class="lbl">From Token</span>
+        <select id="swap-from">
+          <option value="USDC">USDC</option>
+          <option value="USDT">USDT</option>
+          <option value="SOL">SOL</option>
+          <option value="JUP">JUP</option>
+        </select>
+      </label>
+      <label>
+        <span class="lbl">To Token</span>
+        <select id="swap-to">
+          <option value="SOL">SOL</option>
+          <option value="USDC">USDC</option>
+          <option value="USDT">USDT</option>
+          <option value="JUP">JUP</option>
+        </select>
+      </label>
+      <label>
+        <span class="lbl">To Amount</span>
+        <input id="swap-amount" type="number" step="0.001" min="0.001" placeholder="0.01" value="0.01" />
+      </label>
+    </div>
+    <button class="btn btn-yellow" id="swap-btn" onclick="runSwapAndPay()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+        <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+      </svg>
+      Swap &amp; Pay
+    </button>
+    <div class="result" id="swap-result"></div>
+  </div>
+
+  <!-- ── TEST 4: requestAllowance() ───────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Request Token Allowance</div>
+        <div class="card-method green">window.solaiAgent.requestAllowance()</div>
+      </div>
+    </div>
+
+    <p style="font-size:12px; color:var(--muted); line-height:1.6;">
+      Opens an approval popup in the extension. User grants a one-time spending limit so future <code>payToken()</code> calls within the limit don't need re-approval.
+    </p>
+
+    <div class="row">
+      <label>
+        <span class="lbl">Token</span>
+        <select id="alw-token">
+          <option value="USDC">USDC</option>
+          <option value="USDT">USDT</option>
+          <option value="SOL">SOL</option>
+        </select>
+      </label>
+      <label>
+        <span class="lbl">Max Amount</span>
+        <input id="alw-amount" type="number" step="1" min="1" placeholder="50" value="50" />
+      </label>
+      <label>
+        <span class="lbl">Expires (days)</span>
+        <input id="alw-days" type="number" step="1" min="1" placeholder="30" value="30" />
+      </label>
+    </div>
+    <label>
+      <span class="lbl">Purpose label</span>
+      <input id="alw-label" type="text" placeholder="e.g. Monthly subscription" value="Test allowance" />
+    </label>
+    <button class="btn" id="alw-btn" onclick="runRequestAllowance()" style="background:var(--green); color:#0b0f0c;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      Request Allowance
+    </button>
+    <div class="result" id="alw-result"></div>
+  </div>
+
+  <!-- ── Guardrail stress tests ───────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon" style="background:var(--red-dim); color:var(--red);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+      <div>
+        <div class="card-title">Guardrail Stress Tests</div>
+        <div class="card-method" style="color:var(--red);">Expected to fail — verify guardrails are enforced</div>
+      </div>
+    </div>
+
+    <p style="font-size:12px; color:var(--muted); line-height:1.6;">
+      These calls should be <strong style="color:var(--red)">rejected</strong> by the agent's guardrails. Useful to verify your guardrail config is working correctly.
+    </p>
+
+    <label>
+      <span class="lbl">Recipient Address (for stress tests)</span>
+      <input id="stress-recipient" type="text" placeholder="Any valid Solana address" />
+    </label>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button class="btn btn-ghost" onclick="runStress('over-budget')">Test: Over-budget SOL (1000 SOL)</button>
+      <button class="btn btn-ghost" onclick="runStress('disabled-token')">Test: Disallowed token (if token whitelist set)</button>
+      <button class="btn btn-ghost" onclick="runStress('bad-agent')">Test: Invalid Agent ID</button>
+      <button class="btn btn-ghost" onclick="runStress('wrong-origin')">Test: Origin check (call from injected agent)</button>
+    </div>
+    <div class="result" id="stress-result"></div>
+  </div>
+
+  <!-- ── Raw API reference ─────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;">Raw API — browser console</div>
+    <div class="code-block">// SOL payment
+window.solaiAgent.pay({ agentId, recipient, amountSol, memo })
+
+// SPL token payment (USDC, USDT, etc.)
+window.solaiAgent.payToken({ agentId, recipient, token, amount })
+
+// Swap then send in one call
+window.solaiAgent.swapAndPay({ agentId, recipient, fromToken, toToken, toAmount })
+
+// Request spending allowance (shows approval popup once)
+window.solaiAgent.requestAllowance({ agentId, token, maxAmount, expireDays, label })</div>
+  </div>
+
+  <!-- ── Activity Log ──────────────────────────────────────────────── -->
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div class="card-title" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em;">Activity Log</div>
+      <button class="btn-copy" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log" id="activity-log">
+      <div class="log-empty" id="log-empty">No activity yet — run a test above</div>
+    </div>
+  </div>
+
+  <footer>SOLAI Agent Wallet · Local test page · Not deployed</footer>
+</div>
+
+<script>
+  // ── Extension detection ──────────────────────────────────────────
+  const statusEl = document.getElementById('ext-status')
+  const agentCard = document.getElementById('agent-info-card')
+  const agentRows = document.getElementById('agent-info-rows')
+
+  function setStatus(type, text) {
+    statusEl.className = 'status-pill ' + type
+    statusEl.innerHTML = `<span class="dot"></span><span>${text}</span>`
+  }
+
+  function checkExtension() {
+    if (window.solaiAgent) {
+      setStatus('ok', 'SOLAI extension detected')
+      agentCard.style.display = 'block'
+      const pk = window.solana?.publicKey?.toBase58?.() ?? null
+      agentRows.innerHTML = `
+        <div class="info-row">
+          <span class="info-label">solaiAgent API</span>
+          <span class="info-value" style="color:var(--green);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Injected
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Methods</span>
+          <span class="info-value" style="font-family:monospace; font-size:11px; color:var(--muted);">pay · payToken · swapAndPay · requestAllowance</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">window.solana provider</span>
+          <span class="info-value" style="color:${window.solana?.isSOLAI ? 'var(--green)' : 'var(--muted)'};">
+            ${window.solana?.isSOLAI ? 'SOLAI' : window.solana ? 'Other wallet' : 'Not connected'}
+          </span>
+        </div>
+        ${pk ? `
+        <div class="info-row">
+          <span class="info-label">Connected address</span>
+          <span class="info-value">
+            <span style="font-size:11px;">${pk.slice(0,8)}…${pk.slice(-8)}</span>
+            <button class="btn-copy" onclick="copyText('${pk}')">copy</button>
+          </span>
+        </div>` : ''}
+      `
+    } else {
+      setStatus('err', 'SOLAI extension not found — install and refresh')
     }
+  }
 
-    function checkExtension() {
-      if (window.solaiAgent) {
-        setStatus('ok', 'SOLAI extension detected')
-        agentCard.style.display = 'block'
-        agentRows.innerHTML = `
-          <div class="info-row">
-            <span class="info-label">API</span>
-            <span class="info-value">window.solaiAgent ✓</span>
+  // ── Helpers ──────────────────────────────────────────────────────
+  function agentId() { return document.getElementById('shared-agent-id').value.trim() }
+  function copyText(t) { navigator.clipboard.writeText(t).catch(()=>{}) }
+
+  function logActivity(method, status, detail) {
+    const log = document.getElementById('activity-log')
+    const empty = document.getElementById('log-empty')
+    if (empty) empty.remove()
+
+    const now = new Date().toLocaleTimeString()
+    const entry = document.createElement('div')
+    entry.className = 'log-entry ' + (status === 'ok' ? 'ok' : 'err')
+    entry.innerHTML = `
+      <span class="log-time">${now}</span>
+      <div class="log-method">${method}</div>
+      <div class="log-body">${detail}</div>
+    `
+    log.prepend(entry)
+  }
+
+  function clearLog() {
+    const log = document.getElementById('activity-log')
+    log.innerHTML = '<div class="log-empty" id="log-empty">No activity yet — run a test above</div>'
+  }
+
+  function showResult(id, ok, html) {
+    const el = document.getElementById(id)
+    el.className = 'result ' + (ok ? 'success' : 'error')
+    el.innerHTML = html
+  }
+
+  function sigHtml(sig) {
+    const url = `https://explorer.solana.com/tx/${sig}`
+    return `
+      <div class="result-label" style="color:var(--green);">Payment sent</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;">
+        <span class="result-mono">${sig.slice(0,12)}…${sig.slice(-12)}</span>
+        <button class="btn-copy" onclick="copyText('${sig}')">copy</button>
+      </div>
+      <a class="sig-link" href="${url}" target="_blank" style="display:inline-block;margin-top:8px;">View on Explorer</a>
+    `
+  }
+
+  function setBusy(btnId, busy, label) {
+    const btn = document.getElementById(btnId)
+    btn.disabled = busy
+    if (busy) {
+      btn.innerHTML = '<div class="spinner"></div>Processing…'
+    } else {
+      btn.textContent = label
+    }
+  }
+
+  function guard() {
+    if (!window.solaiAgent) { alert('SOLAI extension not found. Install it and refresh.'); return false }
+    if (!agentId()) { alert('Paste your Agent ID in the shared field above.'); return false }
+    return true
+  }
+
+  // ── pay() ────────────────────────────────────────────────────────
+  async function runPay() {
+    if (!guard()) return
+    const recipient = document.getElementById('pay-recipient').value.trim()
+    const amount    = parseFloat(document.getElementById('pay-amount').value)
+    const memo      = document.getElementById('pay-memo').value.trim()
+    if (!recipient) { alert('Enter a recipient address'); return }
+    if (!amount || amount <= 0) { alert('Enter a valid SOL amount'); return }
+
+    setBusy('pay-btn', true)
+    try {
+      const r = await window.solaiAgent.pay({ agentId: agentId(), recipient, amountSol: amount, memo: memo || undefined })
+      showResult('pay-result', true, sigHtml(r.signature))
+      logActivity('pay()', 'ok', `${amount} SOL → ${recipient.slice(0,8)}… · sig: ${r.signature.slice(0,12)}…`)
+    } catch (e) {
+      showResult('pay-result', false, `<div class="result-label">Error</div><div>${e.message}</div>`)
+      logActivity('pay()', 'err', e.message)
+    } finally {
+      setBusy('pay-btn', false)
+      document.getElementById('pay-btn').innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg> Send SOL`
+    }
+  }
+
+  // ── payToken() ───────────────────────────────────────────────────
+  async function runPayToken() {
+    if (!guard()) return
+    const recipient = document.getElementById('tok-recipient').value.trim()
+    const token     = document.getElementById('tok-token').value
+    const amount    = parseFloat(document.getElementById('tok-amount').value)
+    if (!recipient) { alert('Enter a recipient address'); return }
+    if (!amount || amount <= 0) { alert('Enter a valid amount'); return }
+
+    setBusy('tok-btn', true)
+    try {
+      const r = await window.solaiAgent.payToken({ agentId: agentId(), recipient, token, amount })
+      showResult('tok-result', true, sigHtml(r.signature))
+      logActivity('payToken()', 'ok', `${amount} ${token} → ${recipient.slice(0,8)}… · sig: ${r.signature.slice(0,12)}…`)
+    } catch (e) {
+      showResult('tok-result', false, `<div class="result-label">Error</div><div>${e.message}</div>`)
+      logActivity('payToken()', 'err', e.message)
+    } finally {
+      setBusy('tok-btn', false)
+      document.getElementById('tok-btn').innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg> Send Token`
+    }
+  }
+
+  // ── swapAndPay() ─────────────────────────────────────────────────
+  async function runSwapAndPay() {
+    if (!guard()) return
+    const recipient = document.getElementById('swap-recipient').value.trim()
+    const fromToken = document.getElementById('swap-from').value
+    const toToken   = document.getElementById('swap-to').value
+    const toAmount  = parseFloat(document.getElementById('swap-amount').value)
+    if (!recipient) { alert('Enter a recipient address'); return }
+    if (fromToken === toToken) { alert('From and To tokens must be different'); return }
+    if (!toAmount || toAmount <= 0) { alert('Enter a valid amount'); return }
+
+    setBusy('swap-btn', true)
+    try {
+      const r = await window.solaiAgent.swapAndPay({ agentId: agentId(), recipient, fromToken, toToken, toAmount })
+      showResult('swap-result', true, sigHtml(r.signature))
+      logActivity('swapAndPay()', 'ok', `${fromToken} → ${toAmount} ${toToken} → ${recipient.slice(0,8)}… · sig: ${r.signature.slice(0,12)}…`)
+    } catch (e) {
+      showResult('swap-result', false, `<div class="result-label">Error</div><div>${e.message}</div>`)
+      logActivity('swapAndPay()', 'err', e.message)
+    } finally {
+      setBusy('swap-btn', false)
+      document.getElementById('swap-btn').innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg> Swap &amp; Pay`
+    }
+  }
+
+  // ── requestAllowance() ───────────────────────────────────────────
+  async function runRequestAllowance() {
+    if (!guard()) return
+    const token     = document.getElementById('alw-token').value
+    const maxAmount = parseFloat(document.getElementById('alw-amount').value)
+    const expireDays= parseInt(document.getElementById('alw-days').value)
+    const label     = document.getElementById('alw-label').value.trim() || 'Test allowance'
+    if (!maxAmount || maxAmount <= 0) { alert('Enter a valid max amount'); return }
+
+    setBusy('alw-btn', true)
+    document.getElementById('alw-result').className = 'result'
+    try {
+      const r = await window.solaiAgent.requestAllowance({ agentId: agentId(), token, maxAmount, expireDays, label })
+      if (r.approved) {
+        showResult('alw-result', true, `
+          <div class="result-label" style="color:var(--green);">Allowance approved</div>
+          <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
+            <div class="result-mono">ID: ${r.allowanceId ?? '—'}</div>
+            <div class="result-mono">Remaining: ${r.remaining ?? maxAmount} ${token}</div>
+            <div class="result-mono">Expires in: ${expireDays} days</div>
           </div>
-          <div class="info-row">
-            <span class="info-label">wallet.solana</span>
-            <span class="info-value">${window.solana?.isSOLAI ? 'SOLAI provider ✓' : (window.solana ? 'Other wallet' : 'Not found')}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Connected address</span>
-            <span class="info-value">
-              ${window.solana?.publicKey ? window.solana.publicKey.toBase58().slice(0,8) + '…' + window.solana.publicKey.toBase58().slice(-8) : '—'}
-              ${window.solana?.publicKey ? `<button class="btn-copy" onclick="copyText('${window.solana.publicKey.toBase58()}')">copy</button>` : ''}
-            </span>
-          </div>
-        `
+        `)
+        logActivity('requestAllowance()', 'ok', `Approved: ${maxAmount} ${token} · ID: ${(r.allowanceId||'').slice(0,8)}…`)
       } else {
-        setStatus('err', 'SOLAI extension not found — install and refresh')
+        showResult('alw-result', false, `<div class="result-label">Rejected by user</div>`)
+        logActivity('requestAllowance()', 'err', 'User rejected the allowance request')
       }
+    } catch (e) {
+      showResult('alw-result', false, `<div class="result-label">Error</div><div>${e.message}</div>`)
+      logActivity('requestAllowance()', 'err', e.message)
+    } finally {
+      setBusy('alw-btn', false)
+      document.getElementById('alw-btn').innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg> Request Allowance`
+    }
+  }
+
+  // ── Guardrail stress tests ────────────────────────────────────────
+  async function runStress(type) {
+    if (!guard()) return
+    const recipient = document.getElementById('stress-recipient').value.trim()
+
+    let call, desc
+    if (type === 'over-budget') {
+      if (!recipient) { alert('Enter a recipient address for stress tests'); return }
+      desc = '1000 SOL (should exceed any daily budget)'
+      call = () => window.solaiAgent.pay({ agentId: agentId(), recipient, amountSol: 1000 })
+    } else if (type === 'disabled-token') {
+      if (!recipient) { alert('Enter a recipient address for stress tests'); return }
+      desc = 'COPE token (likely not in allowed list)'
+      call = () => window.solaiAgent.payToken({ agentId: agentId(), recipient, token: 'COPE', amount: 1 })
+    } else if (type === 'bad-agent') {
+      desc = 'UUID "00000000-0000-0000-0000-000000000000" (does not exist)'
+      call = () => window.solaiAgent.pay({ agentId: '00000000-0000-0000-0000-000000000000', recipient: recipient || 'SoL1111111111111111111111111111111111111111', amountSol: 0.001 })
+    } else if (type === 'wrong-origin') {
+      desc = 'Checking origin enforcement (this page may or may not be in allowlist)'
+      call = () => window.solaiAgent.pay({ agentId: agentId(), recipient: recipient || 'SoL1111111111111111111111111111111111111111', amountSol: 0.001 })
     }
 
-    function copyText(text) {
-      navigator.clipboard.writeText(text).catch(() => {})
+    try {
+      const r = await call()
+      showResult('stress-result', false, `
+        <div class="result-label">Unexpected success — guardrail may not be set</div>
+        <div style="margin-top:4px; opacity:.7; font-size:11px;">${desc}</div>
+        <div style="margin-top:4px;" class="result-mono">sig: ${r.signature?.slice(0,20)}…</div>
+      `)
+      logActivity('stress:' + type, 'err', 'Passed unexpectedly — ' + desc)
+    } catch (e) {
+      showResult('stress-result', true, `
+        <div class="result-label" style="color:var(--green);">Correctly blocked</div>
+        <div style="margin-top:4px; opacity:.8; font-size:11px;">${desc}</div>
+        <div style="margin-top:6px;" class="result-mono">${e.message}</div>
+      `)
+      logActivity('stress:' + type, 'ok', 'Blocked as expected · ' + e.message.slice(0,60))
     }
+  }
 
-    async function triggerPay() {
-      const agentId = document.getElementById('agent-id').value.trim()
-      const recipient = document.getElementById('recipient').value.trim()
-      const amount = parseFloat(document.getElementById('amount').value)
-      const memo = document.getElementById('memo').value.trim()
-      const resultEl = document.getElementById('result')
-      const btn = document.getElementById('pay-btn')
-
-      resultEl.className = 'result'
-      resultEl.style.display = 'none'
-
-      if (!agentId) { showError('Enter an Agent ID'); return }
-      if (!recipient) { showError('Enter a recipient address'); return }
-      if (!amount || amount <= 0) { showError('Enter a valid amount'); return }
-      if (!window.solaiAgent) { showError('SOLAI extension not detected. Install it and refresh this page.'); return }
-
-      btn.disabled = true
-      btn.innerHTML = '<span class="spinner"></span>Sending…'
-
-      try {
-        const result = await window.solaiAgent.pay({ agentId, recipient, amountSol: amount, memo: memo || undefined })
-        const sig = result.signature
-        const shortSig = sig.slice(0, 8) + '…' + sig.slice(-8)
-        const explorerUrl = `https://explorer.solana.com/tx/${sig}`
-        resultEl.className = 'result success'
-        resultEl.innerHTML = `
-          <div style="font-weight:700; margin-bottom:6px;">✓ Payment sent!</div>
-          <div style="margin-bottom:4px; color:rgba(85,255,136,0.7); font-size:11px;">Transaction signature</div>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-            <code style="font-family:monospace; font-size:11px; word-break:break-all;">${sig}</code>
-            <button class="btn-copy" onclick="copyText('${sig}')">copy</button>
-          </div>
-          <div style="margin-top:10px;">
-            <a class="sig-link" href="${explorerUrl}" target="_blank">View on Solana Explorer ↗</a>
-          </div>
-        `
-        resultEl.style.display = 'block'
-      } catch (e) {
-        showError(e.message || 'Unknown error')
-      } finally {
-        btn.disabled = false
-        btn.textContent = 'Send via Agent Wallet'
-      }
-    }
-
-    function showError(msg) {
-      const resultEl = document.getElementById('result')
-      resultEl.className = 'result error'
-      resultEl.innerHTML = `<strong>Error:</strong> ${msg}`
-      resultEl.style.display = 'block'
-    }
-
-    // Wait a moment for content script to inject
-    setTimeout(checkExtension, 400)
-  </script>
+  // Init
+  setTimeout(checkExtension, 400)
+</script>
 </body>
 </html>

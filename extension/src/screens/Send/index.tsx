@@ -174,7 +174,9 @@ export default function SendScreen() {
               </svg>
               <p className="text-xs opacity-60 flex-1">Resume unsaved draft?</p>
               <button onClick={restoreDraft} className="text-xs text-primary font-semibold">Restore</button>
-              <button onClick={dismissDraft} className="text-xs opacity-30 ml-1">✕</button>
+              <button onClick={dismissDraft} className="opacity-30 ml-1 hover:opacity-60">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           )}
           <AnimatePresence mode="wait">
