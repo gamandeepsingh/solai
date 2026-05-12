@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { QRCodeSVG } from 'qrcode.react'
+import { useLocation } from 'react-router-dom'
 import Header from '../../components/layout/Header'
 import BottomNav from '../../components/layout/BottomNav'
 import CopyButton from '../../components/ui/CopyButton'
@@ -48,11 +49,13 @@ async function fetchStealthBalances(publicKey: string, network: Network): Promis
 }
 
 export default function ReceiveScreen() {
-  const { account, activeId, network, stealthAddresses, generateStealthAddress, collectFromStealth, deleteStealthAddress } = useWallet()
+  const { account, activeId, network, stealthAddresses, generateStealthAddress, collectFromStealth, deleteStealthAddress, metaAddress, generateMetaAddress, scanStealthPayments } = useWallet()
   const { theme } = useTheme()
   const { toast } = useToast()
+  const location = useLocation()
   const address = account?.publicKey ?? ''
-  const [tab, setTab] = useState<'main' | 'stealth'>('main')
+  const initialTab = (location.state as any)?.tab === 'privacy' ? 'stealth' : 'main'
+  const [tab, setTab] = useState<'main' | 'stealth'>(initialTab)
   const [isClaiming, setIsClaiming] = useState(false)
   const [faucetCooldownHrs, setFaucetCooldownHrs] = useState(0)
 
@@ -127,6 +130,8 @@ export default function ReceiveScreen() {
   const [genError, setGenError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [newStealthKey, setNewStealthKey] = useState('')
+  const [isGeneratingMeta, setIsGeneratingMeta] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
 
   const [showCollectModal, setShowCollectModal] = useState(false)
   const [collectTarget, setCollectTarget] = useState('')
@@ -151,12 +156,15 @@ export default function ReceiveScreen() {
     }
   }
 
+  const collectTargetEntry = myStealthAddresses.find(s => s.publicKey === collectTarget)
+  const isEcdhDerived = (collectTargetEntry?.index ?? 0) < 0
+
   async function handleCollect() {
-    if (!collectPassword) return setCollectError('Enter your password')
+    if (!isEcdhDerived && !collectPassword) return setCollectError('Enter your password')
     setIsCollecting(true)
     setCollectError('')
     try {
-      const sig = await collectFromStealth(collectTarget, collectPassword)
+      const sig = await collectFromStealth(collectTarget, isEcdhDerived ? undefined : collectPassword)
       setShowCollectModal(false)
       setStealthBalances(prev => ({ ...prev, [collectTarget]: [] }))
       toast(`Collected! Tx: ${sig.slice(0, 8)}…`, 'success')
@@ -171,7 +179,7 @@ export default function ReceiveScreen() {
     if (!deleteTarget) return
     await deleteStealthAddress(deleteTarget.publicKey)
     setDeleteTarget(null)
-    toast('Stealth address removed', 'success')
+    toast('Privacy address removed', 'success')
   }
 
   function openCollect(pubkey: string) {
@@ -203,7 +211,7 @@ export default function ReceiveScreen() {
             onClick={() => setTab('main')}
             className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-colors ${tab === 'main' ? 'bg-primary text-black' : 'opacity-40'}`}
           >
-            Main
+            Address
           </button>
           <button
             onClick={() => setTab('stealth')}
@@ -212,7 +220,7 @@ export default function ReceiveScreen() {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            Stealth
+            Privacy
           </button>
         </div>
       </div>
@@ -255,9 +263,53 @@ export default function ReceiveScreen() {
           </FadeIn>
         ) : (
           <div className="flex flex-col gap-3 px-4 py-4">
+            {/* ── Meta-address (Umbra-style stealth) ─────── */}
+            <div className="card-bg rounded-3xl p-4 flex flex-col gap-3 border border-primary/20">
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <p className="text-xs font-semibold">Privacy Meta-Address</p>
+                <span className="text-[9px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium ml-auto">ECDH</span>
+              </div>
+              {metaAddress ? (
+                <>
+                  <p className="text-[10px] opacity-40 leading-relaxed">Share once. Senders derive a unique one-time address each payment — no address reuse, no on-chain link to your wallet.</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-mono opacity-50 truncate flex-1">{metaAddress.slice(0, 28)}…</p>
+                    <button onClick={() => { navigator.clipboard.writeText(metaAddress); toast('Meta-address copied!', 'success') }}
+                      className="shrink-0 text-[10px] px-2.5 py-1 rounded-xl border border-primary/30 text-primary hover:bg-primary/10 transition-colors">
+                      Copy
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <motion.button whileTap={{ scale: 0.96 }}
+                      disabled={isScanning}
+                      onClick={async () => { setIsScanning(true); try { await scanStealthPayments(); toast('Scan complete', 'success') } catch (e: any) { toast(e.message, 'error') } finally { setIsScanning(false) } }}
+                      className="flex-1 py-1.5 rounded-xl border border-[var(--color-border)] text-[10px] font-medium opacity-60 hover:opacity-90 disabled:opacity-30 transition-opacity flex items-center justify-center gap-1">
+                      {isScanning ? <><svg className="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Scanning…</> : 'Scan for Incoming'}
+                    </motion.button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] opacity-40 leading-relaxed">Generate a single shareable address. Anyone can send to you privately — each payment goes to a unique one-time address.</p>
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    disabled={isGeneratingMeta}
+                    onClick={async () => { setIsGeneratingMeta(true); try { await generateMetaAddress(); toast('Meta-address generated!', 'success') } catch (e: any) { toast(e.message, 'error') } finally { setIsGeneratingMeta(false) } }}
+                    className="w-full py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    {isGeneratingMeta ? 'Generating…' : <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                      Generate Privacy Meta-Address
+                    </>}
+                  </motion.button>
+                </>
+              )}
+            </div>
+
             <div>
-              <h2 className="text-base font-bold mb-0.5">Stealth Addresses</h2>
-              <p className="text-xs opacity-40">HD-derived addresses unlinkable to your main wallet on-chain.</p>
+              <h2 className="text-base font-bold mb-0.5">Privacy Addresses</h2>
+              <p className="text-xs opacity-40">Unique addresses unlinkable to your main wallet. Share a different one with each contact.</p>
             </div>
 
             {myStealthAddresses.length === 0 ? (
@@ -265,8 +317,8 @@ export default function ReceiveScreen() {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-30">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
-                <p className="text-sm opacity-40">No stealth addresses yet</p>
-                <p className="text-xs opacity-30">Generate one below to receive privately</p>
+                <p className="text-sm opacity-40">No privacy addresses yet</p>
+                <p className="text-xs opacity-30">Generate one below to receive without revealing your main wallet</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -282,6 +334,22 @@ export default function ReceiveScreen() {
                           <p className="text-[10px] font-mono opacity-40">{truncate(s.publicKey)}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <motion.button
+                            whileTap={{ scale: 0.93 }}
+                            onClick={() => {
+                              const shareText = `My privacy address: ${s.publicKey}\n\nSend here to keep my main wallet address private.`
+                              navigator.clipboard.writeText(shareText)
+                              toast('Share message copied!', 'success')
+                            }}
+                            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-primary/10 opacity-30 hover:opacity-80 hover:text-primary transition-all"
+                            title="Share privacy address"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                          </motion.button>
                           <CopyButton text={s.publicKey} />
                           <motion.button
                             whileTap={{ scale: 0.93 }}
@@ -345,7 +413,7 @@ export default function ReceiveScreen() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              Generate New Stealth Address
+              Generate New Privacy Address
             </motion.button>
           </div>
         )}
@@ -366,7 +434,7 @@ export default function ReceiveScreen() {
             >
               {newStealthKey ? (
                 <>
-                  <p className="text-sm font-semibold text-center">Stealth Address Generated</p>
+                  <p className="text-sm font-semibold text-center">Privacy Address Generated</p>
                   <div className="flex justify-center">
                     <div className="p-3 rounded-2xl card-bg">
                       <QRCodeSVG value={newStealthKey} size={140} bgColor="transparent"
@@ -385,7 +453,7 @@ export default function ReceiveScreen() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-semibold text-center">Generate Stealth Address</p>
+                  <p className="text-sm font-semibold text-center">Generate Privacy Address</p>
                   <div className="flex flex-col gap-2">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs opacity-50">Label (optional)</span>
@@ -447,16 +515,25 @@ export default function ReceiveScreen() {
                   </div>
                 )}
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs opacity-50">Password</span>
-                <input type="password"
-                  className="rounded-xl px-3 py-2.5 text-sm bg-[var(--color-bg)] border border-[var(--color-border)] outline-none focus:border-primary/60"
-                  placeholder="Enter your wallet password"
-                  value={collectPassword}
-                  onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
-                  onKeyDown={e => e.key === 'Enter' && handleCollect()}
-                />
-              </label>
+              {isEcdhDerived ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <p className="text-[10px] text-primary">ECDH-derived — no password needed</p>
+                </div>
+              ) : (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs opacity-50">Password</span>
+                  <input type="password"
+                    className="rounded-xl px-3 py-2.5 text-sm bg-[var(--color-bg)] border border-[var(--color-border)] outline-none focus:border-primary/60"
+                    placeholder="Enter your wallet password"
+                    value={collectPassword}
+                    onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
+                    onKeyDown={e => e.key === 'Enter' && handleCollect()}
+                  />
+                </label>
+              )}
               {collectError && <p className="text-xs text-red-400">{collectError}</p>}
               <button onClick={handleCollect} disabled={isCollecting}
                 className="w-full py-3 rounded-2xl bg-primary text-black text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">

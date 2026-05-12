@@ -88,7 +88,7 @@ export default function Welcome() {
         <div className="flex flex-col items-center gap-3">
           <CuteCreature />
           <h1 className="text-3xl font-bold tracking-tight">SOLAI</h1>
-          <p className="text-sm opacity-50 max-w-[200px]">Your friendly Solana wallet, powered by AI</p>
+          <p className="text-sm opacity-50 max-w-[200px]">Your autonomous, privacy-first Solana wallet</p>
         </div>
 
         <div className="flex flex-col gap-3 w-full max-w-[280px]">

@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { track } from '../../lib/analytics'
 
 const NAV_ITEMS = [
   { path: '/home', label: 'Home', icon: (
@@ -21,9 +22,9 @@ const NAV_ITEMS = [
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   )},
-  { path: '/explore', label: 'Explore', icon: (
+  { path: '/agent-wallets', label: 'Agents', icon: (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/>
     </svg>
   )},
   { path: '/history', label: 'History', icon: (
@@ -45,7 +46,7 @@ export default function BottomNav() {
           <motion.button
             key={item.path}
             whileTap={{ scale: 0.9 }}
-            onClick={() => navigate(item.path)}
+            onClick={() => { track('nav_click', { tab: item.label.toLowerCase() }); navigate(item.path) }}
             className="flex flex-col items-center gap-0.5 w-12 py-1 rounded-2xl transition-colors"
           >
             <span className={active ? 'text-primary' : 'opacity-40'}>{item.icon}</span>

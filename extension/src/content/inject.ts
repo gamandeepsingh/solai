@@ -128,8 +128,28 @@ const solaiProvider = {
 // ─── Agent wallet API ────────────────────────────────────────────────────────
 
 const solaiAgentApi = {
+  /** Send SOL from an agent wallet. */
   pay(params: { agentId: string; recipient: string; amountSol: number; memo?: string }): Promise<{ signature: string }> {
     return sendRequest('AGENT_PAY', params)
+  },
+
+  /** Send any SPL token (USDC, USDT, etc.) from an agent wallet. */
+  payToken(params: { agentId: string; recipient: string; token: string; amount: number; memo?: string }): Promise<{ signature: string }> {
+    return sendRequest('AGENT_PAY_TOKEN', params)
+  },
+
+  /** Swap fromToken → toToken via Jupiter, then send toToken to recipient. */
+  swapAndPay(params: { agentId: string; recipient: string; fromToken: string; toToken: string; toAmount: number }): Promise<{ signature: string }> {
+    return sendRequest('AGENT_SWAP_PAY', params)
+  },
+
+  /**
+   * Request a spending allowance for this agent.
+   * If approved (by the user in the SOLAI extension), the agent may spend up to
+   * maxAmount of token per expireDays without further confirmation.
+   */
+  requestAllowance(params: { agentId: string; token: string; maxAmount: number; expireDays: number; label: string }): Promise<{ approved: boolean; allowanceId?: string; remaining?: number }> {
+    return sendRequest('AGENT_REQUEST_ALLOWANCE', params)
   },
 }
 

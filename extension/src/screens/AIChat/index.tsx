@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAI } from '../../context/AIContext'
 import { useWallet } from '../../context/WalletContext'
 import { getLocal } from '../../lib/storage'
+import { track } from '../../lib/analytics'
 import BottomNav from '../../components/layout/BottomNav'
 import Spinner from '../../components/ui/Spinner'
 import ActionCard from '../../components/chat/ActionCard'
@@ -18,7 +19,7 @@ const AI_PLACEHOLDERS = [
 ]
 
 export default function AIChatScreen() {
-  const { messages, isStreaming, sendMessage, confirmAction, cancelAction, clearMessages, abort } = useAI()
+  const { messages, isStreaming, sendMessage, confirmAction, cancelAction, selectAgent, clearMessages, abort } = useAI()
   const { network } = useWallet()
   const location = useLocation()
   const navigate = useNavigate()
@@ -57,6 +58,7 @@ export default function AIChatScreen() {
 
   async function handleSend(text: string) {
     setError('')
+    track('ai_message_sent', { prompt_length: text.length })
     try {
       await sendMessage(text)
     } catch (e: any) {
@@ -221,6 +223,7 @@ export default function AIChatScreen() {
                   message={msg}
                   onConfirm={() => confirmAction(msg.id)}
                   onCancel={() => cancelAction(msg.id)}
+                  onSelectAgent={(agentId) => selectAgent(msg.id, agentId)}
                 />
               ) : (
                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${msg.role === 'user'

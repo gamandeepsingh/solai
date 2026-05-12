@@ -22,6 +22,7 @@ interface AIContextValue {
   sendMessage: (content: string) => Promise<void>
   confirmAction: (messageId: string) => Promise<void>
   cancelAction: (messageId: string) => void
+  selectAgent: (messageId: string, agentId: string | null) => void
   clearMessages: () => void
   abort: () => void
 }
@@ -115,9 +116,15 @@ export function AIProvider({ children }: { children: ReactNode }) {
 
     // Phase 2b: action card path
     if (agentResult) {
+      let agentWallets: import('../types/agent').AgentWallet[] | undefined
+      if (agentResult.kind === 'schedule' || agentResult.kind === 'conditional_order') {
+        agentWallets = (await getLocal('agentWallets')) ?? []
+      }
       const actionMsg: ChatMessage = {
         id: crypto.randomUUID(), role: 'assistant', content: '',
         timestamp: Date.now(), action: agentResult, actionState: 'pending',
+        agentWallets: agentWallets?.length ? agentWallets : undefined,
+        selectedAgentId: null,
       }
       setMessages(prev => [...prev, actionMsg])
       setIsStreaming(false)
@@ -196,20 +203,25 @@ export function AIProvider({ children }: { children: ReactNode }) {
       }
 
       else if (kind === 'schedule') {
+        const agentId = msg.selectedAgentId ?? undefined
         await addScheduledJob({
           action: params.action,
           intervalMs: params.intervalMs,
           intervalLabel: params.intervalLabel,
           nextRun: params.nextRun,
+          agentId,
         })
         ensureSchedulerAlarm()
         updateMsg(setMessages, messageId, { actionState: 'done' })
-        toast('Recurring payment scheduled!', 'success')
+        const via = agentId ? ' via agent wallet' : ''
+        toast(`Recurring payment scheduled${via}!`, 'success')
       }
 
       else if (kind === 'conditional_order') {
+        const agentId = msg.selectedAgentId ?? undefined
         await saveOrder({
           ...params,
+          agentId,
           status: 'pending',
           createdAt: new Date().toISOString(),
         })
@@ -243,6 +255,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
     updateMsg(setMessages, messageId, { actionState: 'cancelled' })
   }, [])
 
+  const selectAgent = useCallback((messageId: string, agentId: string | null) => {
+    updateMsg(setMessages, messageId, { selectedAgentId: agentId })
+  }, [])
+
   const clearMessages = useCallback(() => {
     setMessages([])
     setSession('chatSession', { messages: [], expiresAt: 0 })
@@ -253,7 +269,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AIContext.Provider value={{ messages, isStreaming, sendMessage, confirmAction, cancelAction, clearMessages, abort }}>
+    <AIContext.Provider value={{ messages, isStreaming, sendMessage, confirmAction, cancelAction, selectAgent, clearMessages, abort }}>
       {children}
     </AIContext.Provider>
   )

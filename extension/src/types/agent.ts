@@ -58,6 +58,12 @@ export interface ScheduledJob {
   intervalLabel: string
   nextRun: number
   createdAt: number
+  agentId?: string
+}
+
+export interface TokenBudget {
+  daily: number  // in token units, 0 = unlimited
+  perTx: number  // in token units, 0 = unlimited
 }
 
 export interface AgentGuardrails {
@@ -65,6 +71,14 @@ export interface AgentGuardrails {
   perTxLimitSol: number
   allowedOrigins: string[]
   cooldownMs: number
+  allowedTokens: string[]                     // empty = any token allowed
+  tokenBudgets: Record<string, TokenBudget>   // token symbol → budget
+}
+
+export interface TokenSpendStat {
+  daily: number
+  total: number
+  dailyResetAt: number
 }
 
 export interface AgentStats {
@@ -73,6 +87,13 @@ export interface AgentStats {
   dailyResetAt: number
   lastPaymentAt: number
   txCount: number
+  tokenSpend: Record<string, TokenSpendStat>  // token symbol → stats
+}
+
+export interface AgentAutoRefill {
+  enabled: boolean
+  thresholdSol: number
+  refillAmountSol: number
 }
 
 export interface AgentWallet {
@@ -84,5 +105,17 @@ export interface AgentWallet {
   enabled: boolean
   guardrails: AgentGuardrails
   stats: AgentStats
+  autoRefill?: AgentAutoRefill
 }
 
+export interface TokenAllowance {
+  id: string
+  agentId: string
+  origin: string
+  label: string
+  token: string
+  maxAmount: number
+  spentAmount: number
+  expiresAt: number
+  createdAt: number
+}

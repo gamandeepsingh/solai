@@ -12,6 +12,7 @@ export interface ConditionalOrder {
   percentChange: number
   direction: 'below' | 'above'
   status: OrderStatus
+  agentId?: string
   createdAt: string
   executedAt?: string
   txSignature?: string

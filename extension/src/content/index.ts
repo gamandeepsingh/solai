@@ -54,7 +54,7 @@ window.addEventListener('message', async (event) => {
       // Whitelist expected result fields — prevents prototype pollution
       const safeResult: Record<string, unknown> = {}
       if (result && typeof result === 'object') {
-        const allowed = ['publicKey', 'signature', 'signedTransaction', 'queued', 'requestId']
+        const allowed = ['publicKey', 'signature', 'signedTransaction', 'queued', 'requestId', 'approved', 'allowanceId', 'remaining']
         for (const key of allowed) {
           if (key in result) safeResult[key] = result[key]
         }

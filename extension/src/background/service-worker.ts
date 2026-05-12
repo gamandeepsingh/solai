@@ -9,7 +9,11 @@ import { getSwapQuote, executeSwap } from '../lib/jupiter'
 import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
 import { CURATED_TOKENS, getMintForNetwork } from '../lib/tokens'
-import type { ScheduledJob, AgentWallet } from '../types/agent'
+import { getAllowances, saveAllowance, consumeAllowance } from '../lib/allowances'
+import { fetchStealthAnnouncements, getSolBalance } from '../lib/solana'
+import { tryDecodeAnnouncement } from '../lib/stealth'
+import type { ScheduledJob, AgentWallet, TokenAllowance } from '../types/agent'
+import type { StealthAddress } from '../context/WalletContext'
 import type { ConditionalOrder } from '../types/orders'
 import type { Network } from '../types/wallet'
 
@@ -17,6 +21,8 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('balance-refresh', { periodInMinutes: 1 })
   chrome.alarms.create('scheduler-tick', { periodInMinutes: 1 })
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
+  chrome.alarms.create('agent-refill', { periodInMinutes: 30 })
+  chrome.alarms.create('stealth-scan', { periodInMinutes: 30 })
   chrome.alarms.create('inactivity-check', { periodInMinutes: 360 }) // every 6 hours
 })
 
@@ -153,10 +159,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const due: ScheduledJob[] = scheduledJobs.filter((j: ScheduledJob) => j.nextRun <= now)
     if (!due.length) return
 
-    const keypair = await getSessionKeypair()
+    const mainKeypair = await getSessionKeypair()
     const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
 
     for (const job of due) {
+      const keypair = job.agentId
+        ? (await getAgentKeypair(job.agentId)) ?? mainKeypair
+        : mainKeypair
       if (keypair) {
         try {
           let sig: string
@@ -167,7 +176,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
           } else {
             sig = await sendUsdc(keypair, job.action.recipient, job.action.amount, network)
           }
-          await logTx({ sig, type: 'send', timestamp: Date.now(), amount: job.action.amount, token: job.action.token, status: 'success' })
+          await logTx({ sig, type: 'send', timestamp: Date.now(), amount: job.action.amount, token: job.action.token, status: 'success', agentId: job.agentId })
           chrome.notifications.create(`scheduled-done-${job.id}-${now}`, {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icons/icon128.png'),
@@ -212,7 +221,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         USDT: data.tether?.usd ?? 1,
       }
 
-      const keypair = await getSessionKeypair()
+      const mainKeypair = await getSessionKeypair()
       const updatedOrders = [...conditionalOrders]
 
       for (const order of pending) {
@@ -226,6 +235,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         if (!triggered) continue
 
         const idx = updatedOrders.findIndex((o: ConditionalOrder) => o.id === order.id)
+        const keypair = order.agentId
+          ? (await getAgentKeypair(order.agentId)) ?? mainKeypair
+          : mainKeypair
 
         if (!keypair) {
           chrome.notifications.create(`order-locked-${order.id}`, {
@@ -261,6 +273,83 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
       await setLocal('conditionalOrders', updatedOrders)
     } catch {}
+  }
+
+  if (alarm.name === 'stealth-scan') {
+    const ss = (await chrome.storage.session.get('stealthSession') as any)?.stealthSession
+    if (!ss || ss.expiresAt <= Date.now()) return  // wallet locked
+    const xPriv = new Uint8Array(ss.xPriv)
+
+    const [wallets, activeId] = await Promise.all([getLocal('wallets'), getLocal('activeWalletId')])
+    const activeWallet = wallets?.find((w: any) => w.id === activeId) ?? wallets?.[0]
+    const mainAddress = activeWallet?.keystore?.publicKey ?? activeWallet?.publicKey
+    if (!mainAddress || !activeId) return
+
+    // Require a meta-address to have been generated for this wallet
+    const metaMap = (await getLocal('stealthMetaMap')) ?? {}
+    if (!metaMap[activeId]) return
+
+    const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+    const announcements = await fetchStealthAnnouncements(mainAddress, network).catch(() => [])
+    const existing = new Set<string>(
+      ((await getLocal('stealthAddresses')) ?? []).map((s: StealthAddress) => s.publicKey)
+    )
+    const newEntries: StealthAddress[] = []
+
+    for (const { ephemeralPub } of announcements) {
+      try {
+        const { stealthAddress, keypair } = await tryDecodeAnnouncement(ephemeralPub, xPriv)
+        if (existing.has(stealthAddress)) continue
+        const balance = await getSolBalance(stealthAddress, network).catch(() => 0)
+        if (balance > 0) {
+          newEntries.push({
+            walletId: activeId,
+            index: -1,
+            publicKey: stealthAddress,
+            label: `Stealth — ${new Date().toLocaleDateString()}`,
+            ephemeralPub,
+          })
+          existing.add(stealthAddress)
+        }
+        void keypair  // silence unused var
+      } catch {}
+    }
+
+    if (newEntries.length > 0) {
+      const all = (await getLocal('stealthAddresses')) ?? []
+      await setLocal('stealthAddresses', [...all, ...newEntries])
+      chrome.notifications.create(`stealth-found-${Date.now()}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: 'Stealth Payment Received',
+        message: `${newEntries.length} new private payment${newEntries.length > 1 ? 's' : ''} detected. Open SOLAI to collect.`,
+      })
+    }
+  }
+
+  if (alarm.name === 'agent-refill') {
+    const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+    const refillable = agentWalletList.filter(a => a.autoRefill?.enabled && a.enabled)
+    if (!refillable.length) return
+    const mainKeypair = await getSessionKeypair()
+    if (!mainKeypair) return
+    const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+    for (const agent of refillable) {
+      const { thresholdSol, refillAmountSol } = agent.autoRefill!
+      try {
+        const bal = await getSolBalance(agent.publicKey, network)
+        if (bal < thresholdSol) {
+          const sig = await sendSol(mainKeypair, agent.publicKey, refillAmountSol, network)
+          await logTx({ sig, type: 'send', timestamp: Date.now(), amount: refillAmountSol, token: 'SOL', toOrFrom: agent.publicKey, status: 'success', network })
+          chrome.notifications.create(`refill-${agent.id}-${Date.now()}`, {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+            title: 'Agent Wallet Refilled',
+            message: `${agent.name} auto-refilled with ${refillAmountSol} SOL (balance was ${bal.toFixed(4)} SOL)`,
+          })
+        }
+      } catch {}
+    }
   }
 
   if (alarm.name === 'inactivity-check') {
@@ -466,7 +555,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'SOLAI_AGENT_PAY') {
     ;(async () => {
       const { agentId, recipient, amountSol, origin } = message.params ?? {}
-      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const raw = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw) ? raw : []
       const idx = agentWalletList.findIndex(a => a.id === agentId)
       if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
       const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
@@ -513,8 +603,170 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e: any) {
         sendResponse({ error: e?.message ?? 'Payment failed' })
       }
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent pay failed' }))
+    return true
+  }
+
+  if (message?.type === 'SOLAI_AGENT_PAY_TOKEN') {
+    ;(async () => {
+      const { agentId, recipient, token, amount, origin } = message.params ?? {}
+      const raw2 = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw2) ? raw2 : []
+      const idx = agentWalletList.findIndex(a => a.id === agentId)
+      if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
+      const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
+      if (!agent.enabled) { sendResponse({ error: 'Agent is disabled' }); return }
+
+      const g = agent.guardrails
+      const allowedTokens: string[] = g.allowedTokens ?? []
+      if (allowedTokens.length > 0 && !allowedTokens.includes(token)) {
+        sendResponse({ error: `Token ${token} not in allowed list` }); return
+      }
+      if (g.allowedOrigins.length > 0 && !g.allowedOrigins.some((o: string) => {
+        try { return new URL(origin).hostname === new URL(o).hostname } catch { return false }
+      })) {
+        sendResponse({ error: 'Origin not in allowlist' }); return
+      }
+
+      const tokenBudgets = g.tokenBudgets ?? {}
+      const budget = tokenBudgets[token]
+      const now = Date.now()
+      const todayMidnight = new Date().setHours(0, 0, 0, 0)
+
+      if (!agent.stats.tokenSpend) agent.stats.tokenSpend = {}
+      if (!agent.stats.tokenSpend[token]) agent.stats.tokenSpend[token] = { daily: 0, total: 0, dailyResetAt: 0 }
+      const tStat = agent.stats.tokenSpend[token]
+      if (tStat.dailyResetAt < todayMidnight) { tStat.daily = 0; tStat.dailyResetAt = todayMidnight }
+
+      if (budget) {
+        if (budget.perTx > 0 && amount > budget.perTx) { sendResponse({ error: `Per-tx limit: ${budget.perTx} ${token}` }); return }
+        if (budget.daily > 0 && tStat.daily + amount > budget.daily) { sendResponse({ error: `Daily ${token} budget exceeded (${tStat.daily}/${budget.daily} used)` }); return }
+      }
+
+      if (g.cooldownMs > 0 && agent.stats.lastPaymentAt > 0 && now - agent.stats.lastPaymentAt < g.cooldownMs) {
+        const rem = Math.ceil((g.cooldownMs - (now - agent.stats.lastPaymentAt)) / 1000)
+        sendResponse({ error: `Cooldown active: ${rem}s remaining` }); return
+      }
+
+      const tokenMeta = CURATED_TOKENS.find(t => t.symbol === token)
+      if (!tokenMeta) { sendResponse({ error: `Unknown token: ${token}` }); return }
+
+      const keypair = await getAgentKeypair(agentId)
+      if (!keypair) { sendResponse({ error: 'Session expired — unlock wallet to re-authorize agents' }); return }
+
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      try {
+        const mint = getMintForNetwork(tokenMeta, network)
+        const sig = await sendSplToken(keypair, recipient, amount, mint, network, tokenMeta.decimals)
+        tStat.daily += amount
+        tStat.total += amount
+        agent.stats.lastPaymentAt = now
+        agent.stats.txCount++
+        const updatedList = [...agentWalletList]
+        updatedList[idx] = agent
+        await setLocal('agentWallets', updatedList)
+        await logTx({ sig, type: 'send', timestamp: now, amount, token: token as any, status: 'success', network, agentId })
+        sendResponse({ signature: sig })
+      } catch (e: any) {
+        sendResponse({ error: e?.message ?? 'Payment failed' })
+      }
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent pay token failed' }))
+    return true
+  }
+
+  if (message?.type === 'SOLAI_AGENT_SWAP_PAY') {
+    ;(async () => {
+      const { agentId, recipient, fromToken, toToken, toAmount } = message.params ?? {}
+      const raw3 = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw3) ? raw3 : []
+      const agent = agentWalletList.find(a => a.id === agentId)
+      if (!agent) { sendResponse({ error: 'Agent not found' }); return }
+      if (!agent.enabled) { sendResponse({ error: 'Agent is disabled' }); return }
+
+      const keypair = await getAgentKeypair(agentId)
+      if (!keypair) { sendResponse({ error: 'Session expired — unlock wallet to re-authorize agents' }); return }
+
+      const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+      if (network !== 'mainnet') { sendResponse({ error: 'Swaps require mainnet' }); return }
+
+      try {
+        const quote = await getSwapQuote(fromToken, toToken, toAmount, 50)
+        await executeSwap(quote, keypair)
+        const toMeta = CURATED_TOKENS.find(t => t.symbol === toToken)
+        let sig: string
+        if (toToken === 'SOL') {
+          sig = await sendSol(keypair, recipient, toAmount, network)
+        } else if (toMeta) {
+          const mint = getMintForNetwork(toMeta, network)
+          sig = await sendSplToken(keypair, recipient, toAmount, mint, network, toMeta.decimals)
+        } else {
+          sendResponse({ error: `Unknown target token: ${toToken}` }); return
+        }
+        await logTx({ sig, type: 'swap', timestamp: Date.now(), amount: toAmount, token: `${fromToken}→${toToken}` as any, status: 'success', network, agentId })
+        sendResponse({ signature: sig })
+      } catch (e: any) {
+        sendResponse({ error: e?.message ?? 'Swap-and-pay failed' })
+      }
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent swap-pay failed' }))
+    return true
+  }
+
+  const pendingAllowanceRequests: Map<string, (r: any) => void> = (globalThis as any).__solaiPendingAllowances ??
+    ((globalThis as any).__solaiPendingAllowances = new Map())
+
+  if (message?.type === 'SOLAI_AGENT_REQUEST_ALLOWANCE') {
+    ;(async () => {
+      const { agentId, token, maxAmount, expireDays, label, origin } = message.params ?? {}
+      const existing = (await getAllowances()).find(a =>
+        a.agentId === agentId && a.origin === origin && a.token === token && a.expiresAt > Date.now()
+      )
+      if (existing) {
+        const remaining = existing.maxAmount - existing.spentAmount
+        sendResponse({ approved: true, allowanceId: existing.id, remaining })
+        return
+      }
+      const requestId = crypto.randomUUID()
+      pendingAllowanceRequests.set(requestId, sendResponse)
+      await chrome.storage.session.set({
+        [`pendingAllowance_${requestId}`]: { agentId, token, maxAmount, expireDays, label, origin },
+      })
+      const W = 360, H = 600
+      let left: number | undefined, top: number | undefined
+      try {
+        const focused = await chrome.windows.getLastFocused({ populate: false })
+        left = Math.round((focused.left ?? 0) + ((focused.width ?? 1280) - W) / 2)
+        top  = Math.round((focused.top  ?? 0) + ((focused.height ?? 800) - H) / 2)
+      } catch {}
+      chrome.windows.create({
+        url: `src/popup/index.html?page=allowance-request&requestId=${requestId}`,
+        type: 'popup', width: W, height: H,
+        ...(left !== undefined && { left, top }),
+      })
     })()
     return true
+  }
+
+  if (message?.type === 'SOLAI_ALLOWANCE_RESPONSE') {
+    ;(async () => {
+      const { requestId, approved } = message
+      const resolve = pendingAllowanceRequests.get(requestId)
+      pendingAllowanceRequests.delete(requestId)
+      if (!approved || !resolve) return
+      const stored = await chrome.storage.session.get(`pendingAllowance_${requestId}`) as any
+      const req = stored[`pendingAllowance_${requestId}`]
+      if (!req) return
+      await chrome.storage.session.remove(`pendingAllowance_${requestId}`)
+      const allowance = await saveAllowance({
+        agentId: req.agentId,
+        origin: req.origin,
+        label: req.label,
+        token: req.token,
+        maxAmount: req.maxAmount,
+        expiresAt: Date.now() + req.expireDays * 86_400_000,
+      })
+      resolve({ approved: true, allowanceId: allowance.id, remaining: allowance.maxAmount })
+    })()
+    return false
   }
 
   return false

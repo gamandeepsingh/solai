@@ -1,78 +1,105 @@
 import { useNavigate } from 'react-router-dom'
-import { useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../components/layout/Header'
 import BottomNav from '../../components/layout/BottomNav'
-import BlobBackground from './BlobBackground'
 import BalanceCard from './BalanceCard'
 import TokenList from './TokenList'
 import ActionButtons from './ActionButtons'
-import FloatingParticles from '../../components/animations/FloatingParticle'
+import AgentsSummaryCard from './AgentsSummaryCard'
 import { useBalance } from '../../hooks/useBalance'
+import { useWallet } from '../../context/WalletContext'
 
-const AI_PLACEHOLDERS = [
-  'swap 0.5 SOL → USDC',
-  'send 1 SOL to mom',
-  'save contact Alice',
-  'buy SOL if price drops 10%',
-  'show my balance',
-]
+type Tab = 'tokens' | 'nfts' | 'activity' | 'explore'
+
+function PrivacyCard({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.95 }}
+      onClick={onClick}
+      className="flex flex-col gap-1.5 action-btn-bg rounded-2xl p-3 text-left"
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${count > 0 ? 'bg-[#ABFF7A]' : 'bg-[var(--color-border)]'}`} />
+        <p className="text-[11px] font-semibold">{count > 0 ? 'Privacy on' : 'Privacy off'}</p>
+      </div>
+      <p className="text-[10px] opacity-40">
+        {count > 0 ? `${count} stealth address${count !== 1 ? 'es' : ''}` : 'Tap to set up →'}
+      </p>
+    </motion.button>
+  )
+}
 
 export default function HomeScreen() {
   const { ownedBalances, allTokenBalances, isLoading } = useBalance()
+  const { stealthAddresses, activeId } = useWallet()
   const navigate = useNavigate()
-  const [aiInput, setAiInput] = useState('')
-  const [phIdx, setPhIdx] = useState(0)
+  const [tab, setTab] = useState<Tab>('tokens')
 
-  useEffect(() => {
-    const id = setInterval(() => setPhIdx(i => (i + 1) % AI_PLACEHOLDERS.length), 3000)
-    return () => clearInterval(id)
-  }, [])
+  const myStealthCount = stealthAddresses.filter(s => s.walletId === activeId).length
 
-  function handleAiSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!aiInput.trim()) return
-    navigate('/ai', { state: { initialMessage: aiInput } })
-    setAiInput('')
+  function handleTabClick(t: Tab) {
+    if (t === 'nfts') { navigate('/nfts'); return }
+    if (t === 'activity') { navigate('/history'); return }
+    if (t === 'explore') { navigate('/explore'); return }
+    setTab(t)
   }
 
   return (
-    <div className="h-full flex flex-col bg-[var(--color-bg)] relative overflow-hidden">
-      <FloatingParticles count={6} />
-      <BlobBackground />
-      <div className="relative z-10 flex flex-col h-full">
-        <Header />
-        <div className="flex-1 flex flex-col gap-4 overflow-hidden pb-16">
-          <BalanceCard balances={ownedBalances} isLoading={isLoading} />
-          <ActionButtons />
-          <div className="flex-1 overflow-y-auto px-0">
-            <TokenList ownedBalances={ownedBalances} allTokenBalances={allTokenBalances} />
-          </div>
+    <div className="h-full flex flex-col bg-[var(--color-bg)]">
+      <Header />
+
+      <div className="flex-1 flex flex-col overflow-hidden pb-16">
+        {/* Balance */}
+        <BalanceCard balances={ownedBalances} isLoading={isLoading} />
+
+        {/* Action buttons */}
+        <ActionButtons />
+
+        {/* Stats row: Privacy + Agents */}
+        <div className="grid grid-cols-2 gap-2.5 px-4 mt-3">
+          <PrivacyCard
+            count={myStealthCount}
+            onClick={() => navigate('/receive', { state: { tab: 'privacy' } })}
+          />
+          <AgentsSummaryCard onClick={() => navigate('/agent-wallets')} />
         </div>
-        <div className="absolute bottom-16 left-0 right-0 px-4 pb-2 z-20">
-          <form onSubmit={handleAiSubmit}>
-            <motion.div whileFocus={{ scale: 1.01 }} className="relative">
-              <input
-                value={aiInput}
-                onChange={e => setAiInput(e.target.value)}
-                placeholder={`Ask "${AI_PLACEHOLDERS[phIdx]}"`}
-                className="w-full rounded-2xl pl-4 pr-12 py-3 text-sm bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] placeholder:text-[var(--color-text)]/30 outline-none focus:border-primary/60 transition-colors shadow-lg"
-              />
-              <button
-                type="submit"
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary flex items-center justify-center disabled:opacity-30"
-                disabled={!aiInput.trim()}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
+
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 px-4 mt-4 mb-1">
+          {(['tokens', 'nfts', 'activity', 'explore'] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => handleTabClick(t)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-colors ${
+                tab === t
+                  ? 'bg-[var(--color-card)] border border-[var(--color-border)]'
+                  : 'opacity-35 hover:opacity-60'
+              }`}
+            >
+              {t === 'tokens' ? 'Tokens' : t === 'nfts' ? 'NFTs' : t === 'activity' ? 'Activity' : 'Explore'}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <AnimatePresence mode="wait">
+          {tab === 'tokens' && (
+            <motion.div
+              key="tokens"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex-1 overflow-y-auto"
+            >
+              <TokenList ownedBalances={ownedBalances} allTokenBalances={allTokenBalances} />
             </motion.div>
-          </form>
-        </div>
-        <BottomNav />
+          )}
+        </AnimatePresence>
       </div>
+
+      <BottomNav />
     </div>
   )
 }

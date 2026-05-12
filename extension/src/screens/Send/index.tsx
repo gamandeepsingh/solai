@@ -7,8 +7,11 @@ import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import { useTransaction } from '../../hooks/useTransaction'
 import { useBalance } from '../../hooks/useBalance'
-import { validateRecipientAddress } from '../../lib/solana'
+import { validateRecipientAddress, sendSolStealth, sendSplTokenStealth } from '../../lib/solana'
+import { parseMetaAddress, deriveSenderStealthParams } from '../../lib/stealth'
+import { getMintForNetwork } from '../../lib/tokens'
 import { logTx } from '../../lib/history'
+import { track } from '../../lib/analytics'
 import { useWallet } from '../../context/WalletContext'
 import { updateContactInteraction, getContacts } from '../../lib/contacts'
 import type { TokenBalance } from '../../types/tokens'
@@ -55,7 +58,7 @@ export default function SendScreen() {
   const prefilled = (location.state as any)?.recipient as string | undefined
   const { send, isLoading, awaitingLedger } = useTransaction()
   const { ownedBalances } = useBalance()
-  const { network } = useWallet()
+  const { network, keypair } = useWallet()
 
   const [step, setStep] = useState<Step>(prefilled ? 'amount' : 'address')
   const [recipient, setRecipient] = useState(prefilled ?? '')
@@ -68,8 +71,25 @@ export default function SendScreen() {
   const [showDraftBanner, setShowDraftBanner] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [usePrivacyAddr, setUsePrivacyAddr] = useState(false)
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+  const [isStealthMode, setIsStealthMode] = useState(false)
+  const [stealthParams, setStealthParams] = useState<{ stealthAddress: string; ephemeralPub: string; recipientMainAddress: string } | null>(null)
 
   useEffect(() => { getContacts().then(setContacts) }, [])
+
+  // Detect if recipient is a stealth meta-address and derive one-time address
+  useEffect(() => {
+    const meta = parseMetaAddress(recipient)
+    if (meta) {
+      deriveSenderStealthParams(recipient)
+        .then(params => { setStealthParams(params); setIsStealthMode(true) })
+        .catch(() => { setStealthParams(null); setIsStealthMode(false) })
+    } else {
+      setStealthParams(null)
+      setIsStealthMode(false)
+    }
+  }, [recipient])
 
   const DRAFT_KEY = 'sendDraft'
 
@@ -120,6 +140,11 @@ export default function SendScreen() {
   async function goAddress() {
     setAddrWarning('')
     setError('')
+    if (isStealthMode) {
+      if (!stealthParams) return setError('Deriving stealth address — try again in a moment')
+      setStep('amount')
+      return
+    }
     const result = await validateRecipientAddress(recipient, network)
     if (!result.valid) return setError(result.warning ?? 'Invalid Solana address')
     if (result.warning) setAddrWarning(result.warning)
@@ -146,13 +171,27 @@ export default function SendScreen() {
   async function handleSend() {
     if (!activeToken) return
     try {
-      const sig = await send(recipient, parseFloat(amount), activeToken.meta.symbol)
+      let sig: string
+      if (isStealthMode && stealthParams && keypair) {
+        const { stealthAddress, ephemeralPub, recipientMainAddress } = stealthParams
+        if (activeToken.meta.symbol === 'SOL') {
+          sig = await sendSolStealth(keypair, stealthAddress, recipientMainAddress, parseFloat(amount), ephemeralPub, network)
+        } else {
+          const mint = getMintForNetwork(activeToken.meta, network)
+          sig = await sendSplTokenStealth(keypair, stealthAddress, recipientMainAddress, parseFloat(amount), mint, network, activeToken.meta.decimals, ephemeralPub)
+        }
+        track('stealth_send', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
+      } else {
+        sig = await send(recipient, parseFloat(amount), activeToken.meta.symbol)
+        updateContactInteraction(recipient).catch(() => {})
+        track('transaction_sent', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
+      }
       setTxSig(sig)
       setStep('done')
       chrome.storage.session.remove(DRAFT_KEY)
-      logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: recipient, status: 'success' })
-      updateContactInteraction(recipient).catch(() => {})
+      logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: isStealthMode ? stealthParams?.stealthAddress ?? recipient : recipient, status: 'success' })
     } catch (e: any) {
+      track('transaction_failed', { type: 'send', error: e.message })
       setError(e.message)
     }
   }
@@ -169,12 +208,25 @@ export default function SendScreen() {
               </svg>
               <p className="text-xs opacity-60 flex-1">Resume unsaved draft?</p>
               <button onClick={restoreDraft} className="text-xs text-primary font-semibold">Restore</button>
-              <button onClick={dismissDraft} className="text-xs opacity-30 ml-1">✕</button>
+              <button onClick={dismissDraft} className="opacity-30 ml-1 hover:opacity-60">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           )}
           <AnimatePresence mode="wait">
           {step === 'address' && (
             <motion.div key="address" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4 mt-4">
+              {isStealthMode && stealthParams && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-primary">Private Send — unique one-time address</p>
+                    <p className="text-[9px] opacity-40 font-mono truncate">→ {stealthParams.stealthAddress.slice(0, 18)}…</p>
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="text-xl font-bold">Send</h2>
@@ -206,7 +258,7 @@ export default function SendScreen() {
                   return (
                     <div className="absolute z-20 top-full left-0 right-0 mt-1 card-bg rounded-2xl overflow-hidden border border-[var(--color-border)] shadow-lg">
                       {matches.map(c => (
-                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setShowSuggestions(false) }}
+                        <button key={c.id} onMouseDown={() => { setRecipient(c.address); setSelectedContact(c); setUsePrivacyAddr(false); setShowSuggestions(false) }}
                           className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary/5 transition-colors text-left">
                           <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-sm shrink-0">
                             {c.emoji || c.name[0].toUpperCase()}
@@ -221,6 +273,24 @@ export default function SendScreen() {
                   )
                 })()}
               </div>
+              {selectedContact?.privacyAddress && (
+                <button
+                  onClick={() => {
+                    setUsePrivacyAddr(v => !v)
+                    setRecipient(usePrivacyAddr ? selectedContact.address : selectedContact.privacyAddress!)
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs transition-colors ${
+                    usePrivacyAddr
+                      ? 'border-primary bg-primary/10 text-primary font-medium'
+                      : 'border-[var(--color-border)] opacity-60'
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  {usePrivacyAddr ? 'Sending to privacy address' : 'Send to privacy address'}
+                </button>
+              )}
               <div>
                 <p className="text-[10px] opacity-40 mb-2">Select token</p>
                 {ownedBalances.length > 0 ? (
@@ -279,6 +349,14 @@ export default function SendScreen() {
                 <Row label="Token" value={activeToken.meta.symbol} />
                 <Row label="Amount" value={`${amount} ${activeToken.meta.symbol}`} />
                 <Row label="To" value={`${recipient.slice(0, 8)}...${recipient.slice(-8)}`} />
+                {usePrivacyAddr && (
+                  <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--color-border)]">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <p className="text-[10px] text-primary font-medium">Sending to privacy address</p>
+                  </div>
+                )}
               </div>
               {anomalyWarning && (
                 <div className="rounded-2xl bg-yellow-500/10 border border-yellow-500/30 px-3 py-2">
