@@ -1,4 +1,4 @@
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction, Keypair } from '@solana/web3.js'
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, sendAndConfirmTransaction, Keypair, TransactionInstruction } from '@solana/web3.js'
 import { getAssociatedTokenAddress, createTransferInstruction, getAccount, createAssociatedTokenAccountInstruction, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import nacl from 'tweetnacl'
 import type { Network } from '../types/wallet'
@@ -295,4 +295,162 @@ export async function validateRecipientAddress(
   } catch {}
 
   return { valid: true }
+}
+
+// ── Stealth address support ───────────────────────────────────────────────────
+
+const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
+const SOLAI_STEALTH_PREFIX = 'SOLAI_STEALTH:'
+const STEALTH_DUST_LAMPORTS = 1000  // 0.000001 SOL announcement dust
+
+function buildMemoInstruction(text: string): TransactionInstruction {
+  return new TransactionInstruction({
+    keys: [],
+    programId: MEMO_PROGRAM_ID,
+    data: Buffer.from(text, 'utf8'),
+  })
+}
+
+/**
+ * Send SOL to a stealth address + broadcast an ephemeral pubkey announcement
+ * as a dust transaction with a memo to the recipient's main (visible) address.
+ * The two transactions are separate — the stealth transfer has no memo.
+ */
+export async function sendSolStealth(
+  keypair: nacl.SignKeyPair,
+  stealthAddress: string,
+  recipientMainAddress: string,
+  amount: number,
+  ephemeralPub: string,
+  network: Network,
+): Promise<string> {
+  if (amount <= 0) throw new Error('Amount must be greater than 0')
+  const conn = getConnection(network)
+  const solanaKeypair = naclKeypairToSolana(keypair)
+
+  // Transaction 1: send actual amount to stealth address (no memo — no visible link)
+  const tx1 = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: solanaKeypair.publicKey,
+      toPubkey: new PublicKey(stealthAddress),
+      lamports: Math.round(amount * LAMPORTS_PER_SOL),
+    })
+  )
+  tx1.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+  tx1.feePayer = solanaKeypair.publicKey
+  const sig = await sendAndConfirmTransaction(conn, tx1, [solanaKeypair])
+
+  // Transaction 2: dust announcement — tiny SOL to main address + Memo with ephemeral pubkey
+  try {
+    const tx2 = new Transaction()
+      .add(SystemProgram.transfer({
+        fromPubkey: solanaKeypair.publicKey,
+        toPubkey: new PublicKey(recipientMainAddress),
+        lamports: STEALTH_DUST_LAMPORTS,
+      }))
+      .add(buildMemoInstruction(`${SOLAI_STEALTH_PREFIX}${ephemeralPub}`))
+    tx2.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+    tx2.feePayer = solanaKeypair.publicKey
+    await sendAndConfirmTransaction(conn, tx2, [solanaKeypair])
+  } catch {} // Don't fail the whole operation if announcement dust fails
+
+  return sig
+}
+
+/**
+ * Send SPL tokens to a stealth address + broadcast announcement dust.
+ */
+export async function sendSplTokenStealth(
+  keypair: nacl.SignKeyPair,
+  stealthAddress: string,
+  recipientMainAddress: string,
+  amount: number,
+  mintAddress: string,
+  network: Network,
+  decimals: number,
+  ephemeralPub: string,
+): Promise<string> {
+  if (amount <= 0) throw new Error('Amount must be greater than 0')
+  const conn = getConnection(network)
+  const solanaKeypair = naclKeypairToSolana(keypair)
+  const mintKey = new PublicKey(mintAddress)
+  const fromAta = await getAssociatedTokenAddress(mintKey, solanaKeypair.publicKey)
+  const toKey = new PublicKey(stealthAddress)
+  const toAta = await getAssociatedTokenAddress(mintKey, toKey)
+
+  const tx1 = new Transaction()
+  try { await getAccount(conn, toAta) } catch {
+    tx1.add(createAssociatedTokenAccountInstruction(solanaKeypair.publicKey, toAta, toKey, mintKey))
+  }
+  tx1.add(createTransferInstruction(fromAta, toAta, solanaKeypair.publicKey, BigInt(Math.round(amount * 10 ** decimals))))
+  tx1.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+  tx1.feePayer = solanaKeypair.publicKey
+  const sig = await sendAndConfirmTransaction(conn, tx1, [solanaKeypair])
+
+  try {
+    const tx2 = new Transaction()
+      .add(SystemProgram.transfer({
+        fromPubkey: solanaKeypair.publicKey,
+        toPubkey: new PublicKey(recipientMainAddress),
+        lamports: STEALTH_DUST_LAMPORTS,
+      }))
+      .add(buildMemoInstruction(`${SOLAI_STEALTH_PREFIX}${ephemeralPub}`))
+    tx2.recentBlockhash = (await conn.getLatestBlockhash()).blockhash
+    tx2.feePayer = solanaKeypair.publicKey
+    await sendAndConfirmTransaction(conn, tx2, [solanaKeypair])
+  } catch {}
+
+  return sig
+}
+
+/**
+ * Scan a wallet's recent transactions for SOLAI stealth announcements.
+ * Returns decoded ephemeral public keys found in Memo program log messages.
+ * Uses a single batch getTransactions call to avoid rate-limiting.
+ */
+export async function fetchStealthAnnouncements(
+  mainAddress: string,
+  network: Network,
+  limit = 25,
+): Promise<{ ephemeralPub: string; sig: string; timestamp: number }[]> {
+  const conn = getConnection(network)
+  const results: { ephemeralPub: string; sig: string; timestamp: number }[] = []
+
+  let sigs: { signature: string; blockTime?: number | null }[]
+  try {
+    sigs = await conn.getSignaturesForAddress(new PublicKey(mainAddress), { limit })
+  } catch {
+    return results
+  }
+
+  if (sigs.length === 0) return results
+
+  // Single batch call instead of N individual getTransaction calls
+  let txs: (import('@solana/web3.js').VersionedTransactionResponse | null)[]
+  try {
+    txs = await conn.getTransactions(
+      sigs.map(s => s.signature),
+      { maxSupportedTransactionVersion: 0 },
+    )
+  } catch {
+    return results
+  }
+
+  for (let i = 0; i < sigs.length; i++) {
+    const tx = txs[i]
+    if (!tx) continue
+    for (const log of tx.meta?.logMessages ?? []) {
+      const match = log.match(new RegExp(`Memo.*?: "${SOLAI_STEALTH_PREFIX}([A-Za-z0-9]+)"`))
+      if (match?.[1]) {
+        results.push({ ephemeralPub: match[1], sig: sigs[i].signature, timestamp: sigs[i].blockTime ?? 0 })
+      }
+    }
+  }
+
+  return results
+}
+
+/** Convert a nacl SignKeyPair to a Solana Keypair — exported for stealth spend use */
+export function naclToSolanaKeypair(kp: nacl.SignKeyPair): Keypair {
+  return Keypair.fromSecretKey(kp.secretKey)
 }

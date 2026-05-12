@@ -49,7 +49,7 @@ async function fetchStealthBalances(publicKey: string, network: Network): Promis
 }
 
 export default function ReceiveScreen() {
-  const { account, activeId, network, stealthAddresses, generateStealthAddress, collectFromStealth, deleteStealthAddress } = useWallet()
+  const { account, activeId, network, stealthAddresses, generateStealthAddress, collectFromStealth, deleteStealthAddress, metaAddress, generateMetaAddress, scanStealthPayments } = useWallet()
   const { theme } = useTheme()
   const { toast } = useToast()
   const location = useLocation()
@@ -130,6 +130,8 @@ export default function ReceiveScreen() {
   const [genError, setGenError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [newStealthKey, setNewStealthKey] = useState('')
+  const [isGeneratingMeta, setIsGeneratingMeta] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
 
   const [showCollectModal, setShowCollectModal] = useState(false)
   const [collectTarget, setCollectTarget] = useState('')
@@ -154,12 +156,15 @@ export default function ReceiveScreen() {
     }
   }
 
+  const collectTargetEntry = myStealthAddresses.find(s => s.publicKey === collectTarget)
+  const isEcdhDerived = (collectTargetEntry?.index ?? 0) < 0
+
   async function handleCollect() {
-    if (!collectPassword) return setCollectError('Enter your password')
+    if (!isEcdhDerived && !collectPassword) return setCollectError('Enter your password')
     setIsCollecting(true)
     setCollectError('')
     try {
-      const sig = await collectFromStealth(collectTarget, collectPassword)
+      const sig = await collectFromStealth(collectTarget, isEcdhDerived ? undefined : collectPassword)
       setShowCollectModal(false)
       setStealthBalances(prev => ({ ...prev, [collectTarget]: [] }))
       toast(`Collected! Tx: ${sig.slice(0, 8)}…`, 'success')
@@ -258,6 +263,50 @@ export default function ReceiveScreen() {
           </FadeIn>
         ) : (
           <div className="flex flex-col gap-3 px-4 py-4">
+            {/* ── Meta-address (Umbra-style stealth) ─────── */}
+            <div className="card-bg rounded-3xl p-4 flex flex-col gap-3 border border-primary/20">
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <p className="text-xs font-semibold">Privacy Meta-Address</p>
+                <span className="text-[9px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium ml-auto">ECDH</span>
+              </div>
+              {metaAddress ? (
+                <>
+                  <p className="text-[10px] opacity-40 leading-relaxed">Share once. Senders derive a unique one-time address each payment — no address reuse, no on-chain link to your wallet.</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-mono opacity-50 truncate flex-1">{metaAddress.slice(0, 28)}…</p>
+                    <button onClick={() => { navigator.clipboard.writeText(metaAddress); toast('Meta-address copied!', 'success') }}
+                      className="shrink-0 text-[10px] px-2.5 py-1 rounded-xl border border-primary/30 text-primary hover:bg-primary/10 transition-colors">
+                      Copy
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <motion.button whileTap={{ scale: 0.96 }}
+                      disabled={isScanning}
+                      onClick={async () => { setIsScanning(true); try { await scanStealthPayments(); toast('Scan complete', 'success') } catch (e: any) { toast(e.message, 'error') } finally { setIsScanning(false) } }}
+                      className="flex-1 py-1.5 rounded-xl border border-[var(--color-border)] text-[10px] font-medium opacity-60 hover:opacity-90 disabled:opacity-30 transition-opacity flex items-center justify-center gap-1">
+                      {isScanning ? <><svg className="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Scanning…</> : 'Scan for Incoming'}
+                    </motion.button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] opacity-40 leading-relaxed">Generate a single shareable address. Anyone can send to you privately — each payment goes to a unique one-time address.</p>
+                  <motion.button whileTap={{ scale: 0.97 }}
+                    disabled={isGeneratingMeta}
+                    onClick={async () => { setIsGeneratingMeta(true); try { await generateMetaAddress(); toast('Meta-address generated!', 'success') } catch (e: any) { toast(e.message, 'error') } finally { setIsGeneratingMeta(false) } }}
+                    className="w-full py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-semibold disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    {isGeneratingMeta ? 'Generating…' : <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                      Generate Privacy Meta-Address
+                    </>}
+                  </motion.button>
+                </>
+              )}
+            </div>
+
             <div>
               <h2 className="text-base font-bold mb-0.5">Privacy Addresses</h2>
               <p className="text-xs opacity-40">Unique addresses unlinkable to your main wallet. Share a different one with each contact.</p>
@@ -466,16 +515,25 @@ export default function ReceiveScreen() {
                   </div>
                 )}
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs opacity-50">Password</span>
-                <input type="password"
-                  className="rounded-xl px-3 py-2.5 text-sm bg-[var(--color-bg)] border border-[var(--color-border)] outline-none focus:border-primary/60"
-                  placeholder="Enter your wallet password"
-                  value={collectPassword}
-                  onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
-                  onKeyDown={e => e.key === 'Enter' && handleCollect()}
-                />
-              </label>
+              {isEcdhDerived ? (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <p className="text-[10px] text-primary">ECDH-derived — no password needed</p>
+                </div>
+              ) : (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs opacity-50">Password</span>
+                  <input type="password"
+                    className="rounded-xl px-3 py-2.5 text-sm bg-[var(--color-bg)] border border-[var(--color-border)] outline-none focus:border-primary/60"
+                    placeholder="Enter your wallet password"
+                    value={collectPassword}
+                    onChange={e => { setCollectPassword(e.target.value); setCollectError('') }}
+                    onKeyDown={e => e.key === 'Enter' && handleCollect()}
+                  />
+                </label>
+              )}
               {collectError && <p className="text-xs text-red-400">{collectError}</p>}
               <button onClick={handleCollect} disabled={isCollecting}
                 className="w-full py-3 rounded-2xl bg-primary text-black text-sm font-semibold disabled:opacity-40 flex items-center justify-center gap-2">

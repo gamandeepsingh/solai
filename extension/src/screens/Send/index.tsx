@@ -7,7 +7,9 @@ import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
 import { useTransaction } from '../../hooks/useTransaction'
 import { useBalance } from '../../hooks/useBalance'
-import { validateRecipientAddress } from '../../lib/solana'
+import { validateRecipientAddress, sendSolStealth, sendSplTokenStealth } from '../../lib/solana'
+import { parseMetaAddress, deriveSenderStealthParams } from '../../lib/stealth'
+import { getMintForNetwork } from '../../lib/tokens'
 import { logTx } from '../../lib/history'
 import { track } from '../../lib/analytics'
 import { useWallet } from '../../context/WalletContext'
@@ -56,7 +58,7 @@ export default function SendScreen() {
   const prefilled = (location.state as any)?.recipient as string | undefined
   const { send, isLoading, awaitingLedger } = useTransaction()
   const { ownedBalances } = useBalance()
-  const { network } = useWallet()
+  const { network, keypair } = useWallet()
 
   const [step, setStep] = useState<Step>(prefilled ? 'amount' : 'address')
   const [recipient, setRecipient] = useState(prefilled ?? '')
@@ -71,8 +73,23 @@ export default function SendScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [usePrivacyAddr, setUsePrivacyAddr] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+  const [isStealthMode, setIsStealthMode] = useState(false)
+  const [stealthParams, setStealthParams] = useState<{ stealthAddress: string; ephemeralPub: string; recipientMainAddress: string } | null>(null)
 
   useEffect(() => { getContacts().then(setContacts) }, [])
+
+  // Detect if recipient is a stealth meta-address and derive one-time address
+  useEffect(() => {
+    const meta = parseMetaAddress(recipient)
+    if (meta) {
+      deriveSenderStealthParams(recipient)
+        .then(params => { setStealthParams(params); setIsStealthMode(true) })
+        .catch(() => { setStealthParams(null); setIsStealthMode(false) })
+    } else {
+      setStealthParams(null)
+      setIsStealthMode(false)
+    }
+  }, [recipient])
 
   const DRAFT_KEY = 'sendDraft'
 
@@ -123,6 +140,11 @@ export default function SendScreen() {
   async function goAddress() {
     setAddrWarning('')
     setError('')
+    if (isStealthMode) {
+      if (!stealthParams) return setError('Deriving stealth address — try again in a moment')
+      setStep('amount')
+      return
+    }
     const result = await validateRecipientAddress(recipient, network)
     if (!result.valid) return setError(result.warning ?? 'Invalid Solana address')
     if (result.warning) setAddrWarning(result.warning)
@@ -149,13 +171,25 @@ export default function SendScreen() {
   async function handleSend() {
     if (!activeToken) return
     try {
-      const sig = await send(recipient, parseFloat(amount), activeToken.meta.symbol)
+      let sig: string
+      if (isStealthMode && stealthParams && keypair) {
+        const { stealthAddress, ephemeralPub, recipientMainAddress } = stealthParams
+        if (activeToken.meta.symbol === 'SOL') {
+          sig = await sendSolStealth(keypair, stealthAddress, recipientMainAddress, parseFloat(amount), ephemeralPub, network)
+        } else {
+          const mint = getMintForNetwork(activeToken.meta, network)
+          sig = await sendSplTokenStealth(keypair, stealthAddress, recipientMainAddress, parseFloat(amount), mint, network, activeToken.meta.decimals, ephemeralPub)
+        }
+        track('stealth_send', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
+      } else {
+        sig = await send(recipient, parseFloat(amount), activeToken.meta.symbol)
+        updateContactInteraction(recipient).catch(() => {})
+        track('transaction_sent', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
+      }
       setTxSig(sig)
       setStep('done')
       chrome.storage.session.remove(DRAFT_KEY)
-      logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: recipient, status: 'success' })
-      updateContactInteraction(recipient).catch(() => {})
-      track('transaction_sent', { token: activeToken.meta.symbol, amount: parseFloat(amount) })
+      logTx({ sig, type: 'send', timestamp: Date.now(), amount: parseFloat(amount), token: activeToken.meta.symbol, toOrFrom: isStealthMode ? stealthParams?.stealthAddress ?? recipient : recipient, status: 'success' })
     } catch (e: any) {
       track('transaction_failed', { type: 'send', error: e.message })
       setError(e.message)
@@ -182,6 +216,17 @@ export default function SendScreen() {
           <AnimatePresence mode="wait">
           {step === 'address' && (
             <motion.div key="address" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4 mt-4">
+              {isStealthMode && stealthParams && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-primary">Private Send — unique one-time address</p>
+                    <p className="text-[9px] opacity-40 font-mono truncate">→ {stealthParams.stealthAddress.slice(0, 18)}…</p>
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="text-xl font-bold">Send</h2>

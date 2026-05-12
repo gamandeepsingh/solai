@@ -10,7 +10,10 @@ import { logTx } from '../lib/history'
 import { getLocal, setLocal } from '../lib/storage'
 import { CURATED_TOKENS, getMintForNetwork } from '../lib/tokens'
 import { getAllowances, saveAllowance, consumeAllowance } from '../lib/allowances'
+import { fetchStealthAnnouncements, getSolBalance } from '../lib/solana'
+import { tryDecodeAnnouncement } from '../lib/stealth'
 import type { ScheduledJob, AgentWallet, TokenAllowance } from '../types/agent'
+import type { StealthAddress } from '../context/WalletContext'
 import type { ConditionalOrder } from '../types/orders'
 import type { Network } from '../types/wallet'
 
@@ -19,6 +22,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('scheduler-tick', { periodInMinutes: 1 })
   chrome.alarms.create('price-check', { periodInMinutes: 5 })
   chrome.alarms.create('agent-refill', { periodInMinutes: 30 })
+  chrome.alarms.create('stealth-scan', { periodInMinutes: 30 })
   chrome.alarms.create('inactivity-check', { periodInMinutes: 360 }) // every 6 hours
 })
 
@@ -271,6 +275,58 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     } catch {}
   }
 
+  if (alarm.name === 'stealth-scan') {
+    const ss = (await chrome.storage.session.get('stealthSession') as any)?.stealthSession
+    if (!ss || ss.expiresAt <= Date.now()) return  // wallet locked
+    const xPriv = new Uint8Array(ss.xPriv)
+
+    const [wallets, activeId] = await Promise.all([getLocal('wallets'), getLocal('activeWalletId')])
+    const activeWallet = wallets?.find((w: any) => w.id === activeId) ?? wallets?.[0]
+    const mainAddress = activeWallet?.keystore?.publicKey ?? activeWallet?.publicKey
+    if (!mainAddress || !activeId) return
+
+    // Require a meta-address to have been generated for this wallet
+    const metaMap = (await getLocal('stealthMetaMap')) ?? {}
+    if (!metaMap[activeId]) return
+
+    const network: Network = (await chrome.storage.sync.get('network') as any)?.network ?? 'mainnet'
+    const announcements = await fetchStealthAnnouncements(mainAddress, network).catch(() => [])
+    const existing = new Set<string>(
+      ((await getLocal('stealthAddresses')) ?? []).map((s: StealthAddress) => s.publicKey)
+    )
+    const newEntries: StealthAddress[] = []
+
+    for (const { ephemeralPub } of announcements) {
+      try {
+        const { stealthAddress, keypair } = await tryDecodeAnnouncement(ephemeralPub, xPriv)
+        if (existing.has(stealthAddress)) continue
+        const balance = await getSolBalance(stealthAddress, network).catch(() => 0)
+        if (balance > 0) {
+          newEntries.push({
+            walletId: activeId,
+            index: -1,
+            publicKey: stealthAddress,
+            label: `Stealth — ${new Date().toLocaleDateString()}`,
+            ephemeralPub,
+          })
+          existing.add(stealthAddress)
+        }
+        void keypair  // silence unused var
+      } catch {}
+    }
+
+    if (newEntries.length > 0) {
+      const all = (await getLocal('stealthAddresses')) ?? []
+      await setLocal('stealthAddresses', [...all, ...newEntries])
+      chrome.notifications.create(`stealth-found-${Date.now()}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+        title: 'Stealth Payment Received',
+        message: `${newEntries.length} new private payment${newEntries.length > 1 ? 's' : ''} detected. Open SOLAI to collect.`,
+      })
+    }
+  }
+
   if (alarm.name === 'agent-refill') {
     const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
     const refillable = agentWalletList.filter(a => a.autoRefill?.enabled && a.enabled)
@@ -499,7 +555,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'SOLAI_AGENT_PAY') {
     ;(async () => {
       const { agentId, recipient, amountSol, origin } = message.params ?? {}
-      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const raw = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw) ? raw : []
       const idx = agentWalletList.findIndex(a => a.id === agentId)
       if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
       const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
@@ -546,14 +603,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e: any) {
         sendResponse({ error: e?.message ?? 'Payment failed' })
       }
-    })()
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent pay failed' }))
     return true
   }
 
   if (message?.type === 'SOLAI_AGENT_PAY_TOKEN') {
     ;(async () => {
       const { agentId, recipient, token, amount, origin } = message.params ?? {}
-      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const raw2 = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw2) ? raw2 : []
       const idx = agentWalletList.findIndex(a => a.id === agentId)
       if (idx === -1) { sendResponse({ error: 'Agent not found' }); return }
       const agent = { ...agentWalletList[idx], stats: { ...agentWalletList[idx].stats } }
@@ -612,14 +670,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e: any) {
         sendResponse({ error: e?.message ?? 'Payment failed' })
       }
-    })()
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent pay token failed' }))
     return true
   }
 
   if (message?.type === 'SOLAI_AGENT_SWAP_PAY') {
     ;(async () => {
       const { agentId, recipient, fromToken, toToken, toAmount } = message.params ?? {}
-      const agentWalletList: AgentWallet[] = (await getLocal('agentWallets')) ?? []
+      const raw3 = await getLocal('agentWallets')
+      const agentWalletList: AgentWallet[] = Array.isArray(raw3) ? raw3 : []
       const agent = agentWalletList.find(a => a.id === agentId)
       if (!agent) { sendResponse({ error: 'Agent not found' }); return }
       if (!agent.enabled) { sendResponse({ error: 'Agent is disabled' }); return }
@@ -648,7 +707,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (e: any) {
         sendResponse({ error: e?.message ?? 'Swap-and-pay failed' })
       }
-    })()
+    })().catch((e: any) => sendResponse({ error: e?.message ?? 'Agent swap-pay failed' }))
     return true
   }
 

@@ -4,7 +4,8 @@ import bs58 from 'bs58'
 import type { WalletAccount, WalletEntry, Network } from '../types/wallet'
 import { getLocal, setLocal, removeLocal, getSync, setSync, getSession, setSession, removeSession } from '../lib/storage'
 import { unlockKeystore, createKeystore, generateMnemonic, mnemonicToKeypair, getMnemonicFromKeystore, validateMnemonic } from '../lib/wallet'
-import { getSolBalance, sendSol } from '../lib/solana'
+import { getSolBalance, sendSol, fetchStealthAnnouncements } from '../lib/solana'
+import { deriveStealthX25519, encodeMetaAddress, tryDecodeAnnouncement } from '../lib/stealth'
 import type { AgentWallet, AgentGuardrails } from '../types/agent'
 import { LEDGER_DEFAULT_PATH } from '../lib/ledger'
 
@@ -13,9 +14,10 @@ const COLLECT_FEE_RESERVE = 0.000005
 
 export interface StealthAddress {
   walletId: string
-  index: number
+  index: number         // -1 for ECDH-derived stealth addresses
   publicKey: string
   label: string
+  ephemeralPub?: string // present when index === -1 (ECDH-derived)
 }
 
 interface AddWalletParams {
@@ -48,8 +50,11 @@ interface WalletContextValue {
   setNetwork: (n: Network) => void
   init: () => Promise<{ hasWallet: boolean }>
   generateStealthAddress: (password: string, label: string) => Promise<string>
-  collectFromStealth: (stealthPublicKey: string, password: string) => Promise<string>
+  collectFromStealth: (stealthPublicKey: string, password?: string) => Promise<string>
   deleteStealthAddress: (stealthPublicKey: string) => Promise<void>
+  metaAddress: string | null
+  generateMetaAddress: () => Promise<string>
+  scanStealthPayments: () => Promise<void>
   agentWallets: AgentWallet[]
   createAgentWallet: (password: string, name: string, guardrails: AgentGuardrails) => Promise<AgentWallet>
   updateAgentGuardrails: (agentId: string, guardrails: AgentGuardrails) => Promise<void>
@@ -89,6 +94,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [stealthAddresses, setStealthAddresses] = useState<StealthAddress[]>([])
   const [agentWallets, setAgentWallets] = useState<AgentWallet[]>([])
+  const [metaAddress, setMetaAddress] = useState<string | null>(null)
   const keypairsMapRef = useRef<Record<string, nacl.SignKeyPair>>({})
   const addingWalletRef = useRef(false)
 
@@ -173,6 +179,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const savedStealth = await getLocal('stealthAddresses')
     if (savedStealth) setStealthAddresses(savedStealth)
 
+    // Restore meta-address for the active wallet (popup reopen with valid session)
+    const metaMap = (await getLocal('stealthMetaMap') as Record<string, string> | null) ?? {}
+    const savedMeta = metaMap[savedActiveId]
+    if (savedMeta && savedMeta.split(':').length >= 5) setMetaAddress(savedMeta)
+
     const savedAgentWallets = await getLocal('agentWallets') ?? []
     setAgentWallets(savedAgentWallets)
 
@@ -240,9 +251,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     await setLocal('activeWalletId', id)
     setActiveId(id)
     const kp = keypairsMapRef.current[id]
-    if (kp) {
-      setKeypair(kp)
-      }
+    if (kp) setKeypair(kp)
+    // Load this wallet's meta-address (or clear if it hasn't generated one)
+    const metaMap = (await getLocal('stealthMetaMap') as Record<string, string> | null) ?? {}
+    const walletMeta = metaMap[id]
+    setMetaAddress((walletMeta && walletMeta.split(':').length >= 5) ? walletMeta : null)
   }, [])
 
   const renameWallet = useCallback(async (id: string, name: string) => {
@@ -315,21 +328,95 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setStealthAddresses(updated)
   }, [])
 
-  const collectFromStealth = useCallback(async (stealthPublicKey: string, password: string): Promise<string> => {
+  const collectFromStealth = useCallback(async (stealthPublicKey: string, password?: string): Promise<string> => {
     const allStealth = await getLocal('stealthAddresses') ?? []
     const entry = allStealth.find(s => s.publicKey === stealthPublicKey)
     if (!entry) throw new Error('Stealth address not found')
-    const wallets = await getLocal('wallets') ?? []
-    const walletEntry = wallets.find(w => w.id === entry.walletId)
-    if (!walletEntry) throw new Error('Wallet not found')
-    const mnemonic = await getMnemonicFromKeystore(walletEntry.keystore, password)
-    const stealthKp = await mnemonicToKeypair(mnemonic, entry.index)
+
+    let stealthKp: nacl.SignKeyPair
+    let mainPublicKey: string
+
+    if (entry.index >= 0) {
+      // HD-derived: reconstruct from mnemonic + index
+      if (!password) throw new Error('Password required to collect HD-derived address')
+      const wallets = await getLocal('wallets') ?? []
+      const walletEntry = wallets.find(w => w.id === entry.walletId)
+      if (!walletEntry) throw new Error('Wallet not found')
+      const mnemonic = await getMnemonicFromKeystore(walletEntry.keystore, password)
+      stealthKp = await mnemonicToKeypair(mnemonic, entry.index)
+      mainPublicKey = walletEntry.keystore.publicKey
+    } else {
+      // ECDH-derived: reconstruct from session stealth key + ephemeral pub
+      if (!entry.ephemeralPub) throw new Error('Ephemeral public key missing — cannot reconstruct')
+      const ss = (await chrome.storage.session.get('stealthSession') as any)?.stealthSession
+      if (!ss || ss.expiresAt <= Date.now()) throw new Error('Session expired — re-lock and unlock your wallet')
+      const xPriv = new Uint8Array(ss.xPriv)
+      const result = await tryDecodeAnnouncement(entry.ephemeralPub, xPriv)
+      stealthKp = result.keypair
+      // Main address is the active account's public key
+      const wallets = await getLocal('wallets') ?? []
+      const activeWalletId = await getLocal('activeWalletId')
+      const walletEntry = wallets.find(w => w.id === (activeWalletId ?? entry.walletId))
+      mainPublicKey = walletEntry?.keystore?.publicKey ?? walletEntry?.publicKey ?? ''
+      if (!mainPublicKey) throw new Error('Could not determine main wallet address')
+    }
+
     const balance = await getSolBalance(stealthPublicKey, network)
     const sendable = balance - COLLECT_FEE_RESERVE
     if (sendable <= 0) throw new Error('Insufficient balance in stealth address')
-    const mainPublicKey = walletEntry.keystore.publicKey
     return sendSol(stealthKp, mainPublicKey, sendable, network)
   }, [network])
+
+  const generateMetaAddress = useCallback(async (): Promise<string> => {
+    const ss = (await chrome.storage.session.get('stealthSession') as any)?.stealthSession
+    if (!ss || ss.expiresAt <= Date.now()) throw new Error('Wallet session expired — re-lock and unlock')
+    if (!account?.publicKey || !activeId) throw new Error('No active wallet')
+    const xPriv = new Uint8Array(ss.xPriv)
+    const { publicKey: xPub } = nacl.box.keyPair.fromSecretKey(xPriv)
+    const metaAddr = encodeMetaAddress(xPub, account.publicKey)
+    // Store per-wallet so switching wallets keeps each wallet's meta-address
+    const metaMap = (await getLocal('stealthMetaMap') as Record<string, string> | null) ?? {}
+    metaMap[activeId] = metaAddr
+    await setLocal('stealthMetaMap', metaMap)
+    setMetaAddress(metaAddr)
+    return metaAddr
+  }, [activeId, account])
+
+  const scanStealthPayments = useCallback(async (): Promise<void> => {
+    if (!account) return
+    const ss = (await chrome.storage.session.get('stealthSession') as any)?.stealthSession
+    if (!ss || ss.expiresAt <= Date.now()) return
+    const xPriv = new Uint8Array(ss.xPriv)
+
+    const announcements = await fetchStealthAnnouncements(account.publicKey, network)
+    const existing = new Set((await getLocal('stealthAddresses') ?? []).map((s: StealthAddress) => s.publicKey))
+    const newEntries: StealthAddress[] = []
+
+    for (const { ephemeralPub } of announcements) {
+      try {
+        const { stealthAddress, keypair } = await tryDecodeAnnouncement(ephemeralPub, xPriv)
+        if (existing.has(stealthAddress)) continue
+        const balance = await getSolBalance(stealthAddress, network).catch(() => 0)
+        if (balance > 0) {
+          newEntries.push({
+            walletId: activeId!,
+            index: -1,
+            publicKey: bs58.encode(keypair.publicKey),
+            label: `Stealth — ${new Date().toLocaleDateString()}`,
+            ephemeralPub,
+          })
+          existing.add(stealthAddress)
+        }
+      } catch {}
+    }
+
+    if (newEntries.length > 0) {
+      const all = await getLocal('stealthAddresses') ?? []
+      const updated = [...all, ...newEntries]
+      await setLocal('stealthAddresses', updated)
+      setStealthAddresses(updated)
+    }
+  }, [account, network, activeId])
 
   const unlock = useCallback(async (password: string): Promise<void> => {
     const wallets = await getLocal('wallets') ?? []
@@ -359,6 +446,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
     if (Object.keys(agentMap).length > 0) await saveAgentSession(agentMap)
     setAgentWallets(agentList)
+
+    // Derive stealth X25519 key for active wallet and cache in session
+    const activeWalletEntry = wallets.find(w => w.id === savedActiveId) ?? wallets[0]
+    if (activeWalletEntry?.keystore) {
+      try {
+        const mnemonic = await getMnemonicFromKeystore(activeWalletEntry.keystore, password)
+        const stealthKp = await deriveStealthX25519(mnemonic)
+        await chrome.storage.session.set({
+          stealthSession: { xPriv: Array.from(stealthKp.priv), expiresAt: Date.now() + SESSION_TTL }
+        })
+        const metaMap = (await getLocal('stealthMetaMap') as Record<string, string> | null) ?? {}
+        const savedMeta = metaMap[savedActiveId]
+        if (savedMeta && savedMeta.split(':').length >= 5) {
+          setMetaAddress(savedMeta)
+        }
+      } catch {}
+    }
 
     // Reset inactivity timer on unlock
     const guard = await getLocal('inactivityGuard')
@@ -526,6 +630,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsLocked(true)
     await removeSession('walletSession')
     await removeSession('agentSession')
+    await chrome.storage.session.remove('stealthSession')
+    setMetaAddress(null)
   }, [])
 
   const setNetwork = useCallback((n: Network) => {
@@ -541,6 +647,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       resetAllWallets,
       unlock, lock, changePassword, changePasswordFromMnemonic, setNetwork, init,
       generateStealthAddress, collectFromStealth, deleteStealthAddress,
+      metaAddress, generateMetaAddress, scanStealthPayments,
       agentWallets,
       createAgentWallet, updateAgentGuardrails, saveAgentWallet, toggleAgent, deleteAgentWallet,
       fundAgent, collectFromAgent,

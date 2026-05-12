@@ -25,6 +25,7 @@ type LocalData = {
   cachedSplBalances: Record<string, number>
   approvedOrigins: { origin: string; connectedAt: string }[]
   stealthAddresses: { walletId: string; index: number; publicKey: string; label: string }[]
+  stealthMetaMap: Record<string, string>   // walletId → meta-address
   agentWallets: AgentWallet[]
   watchlist: string[]
   inactivityGuard: {

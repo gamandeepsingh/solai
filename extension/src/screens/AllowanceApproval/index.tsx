@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Spinner from '../../components/ui/Spinner'
+import { getLocal } from '../../lib/storage'
 
 interface Props {
   requestId: string
@@ -25,8 +26,8 @@ export default function AllowanceApprovalScreen({ requestId }: Props) {
       const req = stored[`pendingAllowance_${requestId}`]
       if (req) {
         setRequest(req)
-        chrome.storage.local.get('agentWallets').then((r: any) => {
-          const agent = (r.agentWallets ?? []).find((a: any) => a.id === req.agentId)
+        getLocal('agentWallets').then(list => {
+          const agent = (list ?? []).find(a => a.id === req.agentId)
           if (agent) setAgentName(agent.name)
         })
       }
